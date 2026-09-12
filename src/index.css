@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: theme('colors.cream');
+  color: theme('colors.ink');
+  font-family: theme('fontFamily.sans');
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+@layer components {
+  .panel {
+    @apply bg-paper border border-edge rounded-xl p-4;
+  }
+  .label {
+    @apply font-head uppercase tracking-wide text-xs text-dim;
+  }
+  .field {
+    @apply w-full bg-cream border border-edge rounded-lg px-3 py-2 text-ink
+           focus:outline-none focus:border-oxblood focus:ring-1 focus:ring-oxblood;
+  }
+  .btn {
+    @apply font-head uppercase tracking-wide text-sm rounded-lg px-4 py-2 transition-colors
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-oxblood text-cream hover:bg-pink;
+  }
+  .btn-ghost {
+    @apply btn border border-edge text-ink hover:bg-edge/40;
+  }
+  .chip {
+    @apply font-head uppercase tracking-wide text-xs rounded-full px-3 py-1 border border-edge
+           text-dim hover:border-oxblood hover:text-oxblood transition-colors cursor-pointer;
+  }
+  .chip-on {
+    @apply bg-oxblood text-cream border-oxblood hover:text-cream;
+  }
+}
+
+/* thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.edge') transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: theme('colors.edge'); border-radius: 4px; }
