@@ -19,6 +19,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.MYOS_BRIDGE_PORT) || 4177;
 
 const app = express();
+// Private Network Access: a public HTTPS page (e.g. the GitHub Pages site) making
+// a request to this localhost bridge triggers a preflight carrying
+// `Access-Control-Request-Private-Network`. Chromium requires us to answer with
+// `Access-Control-Allow-Private-Network: true` or it blocks the call.
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 

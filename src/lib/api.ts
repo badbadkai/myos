@@ -1,7 +1,12 @@
 import type { Schema, Daily, FinanceSummary, Streaks, CalEvent } from './types';
 
+// In dev and the localhost bridge build this is '' so calls hit the same
+// origin (Vite proxies /api, or the bridge serves the app). In the Pages build
+// it's the absolute bridge URL, since the static site can't proxy.
+const API_BASE = __BRIDGE_BASE__;
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
   });

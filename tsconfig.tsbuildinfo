@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/lib/api.ts","./src/lib/types.ts","./src/lib/ui.tsx","./src/views/calendar.tsx","./src/views/habits.tsx","./src/views/money.tsx","./src/views/settings.tsx","./src/views/today.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/lib/api.ts","./src/lib/types.ts","./src/lib/ui.tsx","./src/views/calendar.tsx","./src/views/habits.tsx","./src/views/money.tsx","./src/views/settings.tsx","./src/views/today.tsx"],"version":"5.9.3"}

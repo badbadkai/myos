@@ -4,11 +4,20 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // When deploying the UI-only mirror to GitHub Pages, the project lives at /myos/.
 // When the local bridge serves the built app (the real setup), it sits at root.
-const base = process.env.DEPLOY_TARGET === 'pages' ? '/myos/' : '/';
+const isPages = process.env.DEPLOY_TARGET === 'pages';
+const base = isPages ? '/myos/' : '/';
 const BRIDGE_PORT = process.env.MYOS_BRIDGE_PORT || '4177';
+// The Pages build is a static site with no proxy, so it must call the bridge by
+// an absolute URL. localhost is a trusted origin in Chromium, so an HTTPS Pages
+// page can reach http://localhost:4177 (the bridge adds the Private-Network-Access
+// header). Override with MYOS_PUBLIC_BRIDGE (e.g. a Tailscale HTTPS address).
+const bridgeBase = isPages ? (process.env.MYOS_PUBLIC_BRIDGE || `http://localhost:${BRIDGE_PORT}`) : '';
 
 export default defineConfig({
   base,
+  define: {
+    __BRIDGE_BASE__: JSON.stringify(bridgeBase),
+  },
   plugins: [
     react(),
     VitePWA({
