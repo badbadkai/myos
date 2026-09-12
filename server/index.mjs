@@ -98,6 +98,16 @@ app.post('/api/daily/log', h((req, res) => {
   res.json(appendLog(date || todayIso(), text.trim(), schema));
 }));
 
+// Step count push — written to the daily note's `steps` frontmatter field.
+// Built for an iOS Shortcut automation authenticating with the X-API-Key header.
+app.post('/api/daily/steps', h((req, res) => {
+  const schema = getSchema();
+  const { date, steps } = req.body;
+  const n = Number(steps);
+  if (!Number.isFinite(n)) throw new Error('steps (number) required');
+  res.json(setDailyFields(date || todayIso(), { steps: Math.round(n) }, schema));
+}));
+
 // ---- finance --------------------------------------------------------------
 app.get('/api/finance/summary', h((req, res) => {
   res.json(financeSummary(getSchema()));

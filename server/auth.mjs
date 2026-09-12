@@ -66,7 +66,23 @@ export function verifyToken(token) {
   return payload;
 }
 
+// A long-lived API key (in the fortress config) lets trusted automations —
+// e.g. an iOS Shortcut pushing step counts — authenticate without the browser
+// login flow. Sent as the `X-API-Key` header.
+function apiKeyOk(req) {
+  const key = req.headers['x-api-key'];
+  const want = cfg().apiKey;
+  if (!key || !want) return false;
+  const a = Buffer.from(String(key));
+  const b = Buffer.from(String(want));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function requireAuth(req, res, next) {
+  if (apiKeyOk(req)) {
+    req.user = { sub: cfg().email, via: 'apikey' };
+    return next();
+  }
   const hdr = req.headers.authorization || '';
   const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : '';
   const payload = verifyToken(token);
