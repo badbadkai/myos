@@ -109,6 +109,23 @@ app.post('/api/daily/steps', h((req, res) => {
   res.json(setDailyFields(date || todayIso(), { steps: Math.round(n) }, schema));
 }));
 
+// Reflection reminder — returns plain reminder text when today's reflection
+// fields are still blank, and an empty body when they're all filled. Built for
+// an iOS Shortcut time automation: fetch this, and only Show Notification if the
+// body has any text. Key rides in the query string like the steps push.
+app.get('/api/daily/reflection-due', h((req, res) => {
+  const schema = getSchema();
+  const iso = req.query.date || todayIso();
+  const daily = getDaily(iso, schema);
+  const fm = daily.frontmatter || {};
+  const fields = schema.dailyNote.frontmatter.filter((f) => f.group === 'reflection' && f.type === 'text');
+  const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+  const missing = fields.filter((f) => blank(fm[f.key]));
+  res.type('text/plain');
+  if (missing.length === 0) return res.send('');
+  res.send(`myOS: reflections still open today — ${missing.map((f) => f.label).join(', ')}.`);
+}));
+
 // ---- finance --------------------------------------------------------------
 app.get('/api/finance/summary', h((req, res) => {
   res.json(financeSummary(getSchema()));
