@@ -1,6 +1,6 @@
 import type { Schema } from '../lib/types';
 
-export default function Settings({ schema, vault }: { schema: Schema; vault: string }) {
+export default function Settings({ schema, vault, onLogout }: { schema: Schema; vault: string; onLogout: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="panel">
@@ -24,6 +24,7 @@ export default function Settings({ schema, vault }: { schema: Schema; vault: str
           <code className="mx-1">x/myos.schema.json</code>in the vault to add fields — no rebuild needed.
         </p>
       </div>
+      <button className="btn-ghost text-pink border-pink" onClick={onLogout}>Sign out</button>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   listEvents, upsertEvent, deleteEvent,
   captureInbox,
 } from './vault.mjs';
+import { loadAuth, verifyPassword, issueToken, requireAuth } from './auth.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.MYOS_BRIDGE_PORT) || 4177;
@@ -42,11 +43,24 @@ const h = (fn) => (req, res) => {
     });
 };
 
-// ---- health + schema ------------------------------------------------------
+// ---- public: health + login -----------------------------------------------
 app.get('/api/health', h((req, res) => {
   const vault = locateVault();
   res.json({ ok: true, vault, today: todayIso() });
 }));
+
+app.post('/api/login', h((req, res) => {
+  const { email, password } = req.body || {};
+  if (!verifyPassword(email, password)) return res.status(401).json({ error: 'Wrong email or password' });
+  res.json({ token: issueToken(), email: String(email).toLowerCase() });
+}));
+
+app.get('/api/me', requireAuth, h((req, res) => {
+  res.json({ email: req.user.sub, exp: req.user.exp });
+}));
+
+// ---- everything below requires a valid session -----------------------------
+app.use('/api', requireAuth);
 
 app.get('/api/schema', h((req, res) => {
   res.json(getSchema());
@@ -144,5 +158,7 @@ app.listen(PORT, () => {
   try { vaultMsg = `vault: ${locateVault()}`; } catch (e) { vaultMsg = `VAULT NOT FOUND — ${e.message}`; }
   console.log(`[myos] bridge on http://localhost:${PORT}`);
   console.log(`[myos] ${vaultMsg}`);
+  try { const a = loadAuth(); console.log(`[myos] login as ${a.email} (${a.sessionDays}-day sessions)`); }
+  catch (e) { console.log(`[myos] AUTH CONFIG MISSING — ${e.message}`); }
   if (existsSync(dist)) console.log('[myos] serving built PWA from dist/');
 });

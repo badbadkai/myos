@@ -4,12 +4,30 @@ import type { Schema, Daily, FinanceSummary, Streaks, CalEvent } from './types';
 // origin (Vite proxies /api, or the bridge serves the app). In the Pages build
 // it's the absolute bridge URL, since the static site can't proxy.
 const API_BASE = __BRIDGE_BASE__;
+const TOKEN_KEY = 'myos.token';
+
+export const auth = {
+  get: () => localStorage.getItem(TOKEN_KEY) || '',
+  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
+// Thrown on a 401 so the app can drop to the login screen.
+export class AuthError extends Error {}
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
+  const token = auth.get();
   const res = await fetch(`${API_BASE}/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...opts,
   });
+  if (res.status === 401) {
+    auth.clear();
+    throw new AuthError('Session expired — please sign in again.');
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try { msg = (await res.json()).error || msg; } catch { /* noop */ }
@@ -20,6 +38,15 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => req<{ ok: boolean; vault: string; today: string }>('/health'),
+  login: async (email: string, password: string) => {
+    const r = await req<{ token: string; email: string }>('/login', {
+      method: 'POST', body: JSON.stringify({ email, password }),
+    });
+    auth.set(r.token);
+    return r;
+  },
+  me: () => req<{ email: string; exp: number }>('/me'),
+  logout: () => auth.clear(),
   schema: () => req<Schema>('/schema'),
 
   today: (date?: string) => req<Daily>(`/today${date ? `?date=${date}` : ''}`),

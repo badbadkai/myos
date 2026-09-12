@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { api } from './lib/api';
+import { useEffect, useState, useCallback } from 'react';
+import { api, auth, AuthError } from './lib/api';
 import type { Schema } from './lib/types';
 import { ToastProvider } from './lib/ui';
+import Login from './views/Login';
 import Today from './views/Today';
 import Money from './views/Money';
 import Calendar from './views/Calendar';
@@ -18,23 +19,67 @@ const TABS: { id: Tab; label: string; glyph: string }[] = [
   { id: 'settings', label: 'Settings', glyph: '⚙' },
 ];
 
+type Phase = 'checking' | 'offline' | 'login' | 'ready';
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('today');
   const [schema, setSchema] = useState<Schema | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string>('');
   const [vault, setVault] = useState<string>('');
+  const [phase, setPhase] = useState<Phase>('checking');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const hp = await api.health();
-        setVault(hp.vault);
-        setSchema(await api.schema());
-      } catch (e) {
-        setErr((e as Error).message);
-      }
-    })();
+  const boot = useCallback(async () => {
+    setPhase('checking'); setErr('');
+    try {
+      const hp = await api.health();
+      setVault(hp.vault);
+    } catch (e) {
+      setErr((e as Error).message);
+      setPhase('offline');
+      return;
+    }
+    if (!auth.get()) { setPhase('login'); return; }
+    try {
+      await api.me();
+      setSchema(await api.schema());
+      setPhase('ready');
+    } catch (e) {
+      if (e instanceof AuthError) setPhase('login');
+      else { setErr((e as Error).message); setPhase('offline'); }
+    }
   }, []);
+
+  useEffect(() => { boot(); }, [boot]);
+
+  const logout = () => { api.logout(); setSchema(null); setPhase('login'); };
+
+  if (phase === 'checking') {
+    return <div className="min-h-full flex items-center justify-center text-dim text-sm">Connecting…</div>;
+  }
+
+  if (phase === 'offline') {
+    return (
+      <div className="min-h-full flex items-center justify-center px-6">
+        <div className="panel border-pink max-w-sm w-full">
+          <p className="font-head uppercase text-xs tracking-wide mb-1 text-pink">Bridge offline</p>
+          <p className="text-sm text-ink">{err}</p>
+          <p className="text-xs text-dim mt-2">
+            Start the bridge on the PC holding the vault: <code>npm start</code> (or <code>npm run dev:bridge</code>),
+            and make sure the SILVER drive is mounted. The bridge must be running for myOS to reach the vault.
+          </p>
+          <button className="btn-primary w-full mt-4" onClick={boot}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'login') {
+    return (
+      <ToastProvider>
+        <Login onDone={boot} />
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>
@@ -47,21 +92,13 @@ export default function App() {
         </header>
 
         <main className="flex-1 px-4 pb-28">
-          {err && (
-            <div className="panel border-pink text-pink">
-              <p className="font-head uppercase text-xs tracking-wide mb-1">Bridge offline</p>
-              <p className="text-sm">{err}</p>
-              <p className="text-xs text-dim mt-2">Start it with <code>npm run dev:bridge</code> and check the SILVER drive is mounted.</p>
-            </div>
-          )}
-          {!err && !schema && <p className="text-dim text-sm">Connecting to the vault…</p>}
           {schema && (
             <>
               {tab === 'today' && <Today schema={schema} />}
               {tab === 'money' && <Money schema={schema} />}
               {tab === 'calendar' && <Calendar schema={schema} />}
               {tab === 'habits' && <Habits />}
-              {tab === 'settings' && <Settings schema={schema} vault={vault} />}
+              {tab === 'settings' && <Settings schema={schema} vault={vault} onLogout={logout} />}
             </>
           )}
         </main>
