@@ -56,6 +56,8 @@ export const api = {
     req<Daily>('/daily/habit', { method: 'POST', body: JSON.stringify({ date, habitKey, checked }) }),
   bumpCounter: (date: string, field: string, delta: number) =>
     req<Daily>('/daily/counter', { method: 'POST', body: JSON.stringify({ date, field, delta }) }),
+  addLog: (date: string, text: string) =>
+    req<Daily>('/daily/log', { method: 'POST', body: JSON.stringify({ date, text }) }),
 
   finance: () => req<FinanceSummary>('/finance/summary'),
   addTransaction: (tx: { date?: string; amount: number; category: string; note?: string }) =>

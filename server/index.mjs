@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
   locateVault, getSchema, todayIso,
-  getDaily, setDailyFields, setHabit, bumpCounter,
+  getDaily, setDailyFields, setHabit, bumpCounter, appendLog,
   financeSummary, addTransaction, addSnapshot,
   habitStreaks,
   listEvents, upsertEvent, deleteEvent,
@@ -89,6 +89,13 @@ app.post('/api/daily/counter', h((req, res) => {
   const schema = getSchema();
   const { date, field, delta } = req.body;
   res.json(bumpCounter(date || todayIso(), field, Number(delta) || 0, schema));
+}));
+
+app.post('/api/daily/log', h((req, res) => {
+  const schema = getSchema();
+  const { date, text } = req.body;
+  if (!text || !text.trim()) throw new Error('text required');
+  res.json(appendLog(date || todayIso(), text.trim(), schema));
 }));
 
 // ---- finance --------------------------------------------------------------

@@ -124,7 +124,7 @@ function createDailyFromTemplate(iso, schema) {
 
 export function getDaily(iso, schema) {
   const rel = dailyRel(iso, schema);
-  if (!exists(rel)) return { date: iso, exists: false, frontmatter: {}, habits: {} };
+  if (!exists(rel)) return { date: iso, exists: false, frontmatter: {}, habits: {}, log: [] };
   const raw = read(rel);
   const fm = matter(raw);
   const habits = {};
@@ -133,7 +133,7 @@ export function getDaily(iso, schema) {
     const mm = raw.match(re);
     habits[cb.habitKey] = mm ? mm[1].toLowerCase() === 'x' : false;
   }
-  return { date: iso, exists: true, frontmatter: fm.data, habits };
+  return { date: iso, exists: true, frontmatter: fm.data, habits, log: parseLog(raw, schema) };
 }
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -201,6 +201,74 @@ export function bumpCounter(iso, field, delta, schema) {
   const now = Number(cur.frontmatter?.[field] ?? 0) || 0;
   const next = Math.max(0, now + delta);
   return setDailyFields(iso, { [field]: next }, schema);
+}
+
+// ---- Log section (timestamped brain dump) --------------------------------
+function logHeading(schema) {
+  return schema.dailyNote.logSection || '## Log';
+}
+function hhmm() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// Locate the Log section body as a [start, end) line range (exclusive of the
+// heading line itself; end is the next "## " heading or EOF).
+function logSectionRange(lines, heading) {
+  const hIdx = lines.findIndex((l) => l.trim() === heading);
+  if (hIdx === -1) return null;
+  let end = lines.length;
+  for (let i = hIdx + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) { end = i; break; }
+  }
+  return { hIdx, end };
+}
+
+function parseLog(raw, schema) {
+  const lines = raw.split('\n');
+  const range = logSectionRange(lines, logHeading(schema));
+  if (!range) return [];
+  const out = [];
+  for (const l of lines.slice(range.hIdx + 1, range.end)) {
+    const t = l.trim();
+    if (!t || t === '-') continue;
+    const m = t.match(/^-\s+(?:\*\*(\d{1,2}:\d{2})\*\*\s+)?(.*)$/);
+    if (m && m[2]) out.push({ time: m[1] || '', text: m[2] });
+  }
+  return out;
+}
+
+// Append one timestamped bullet under the Log section. Multi-line input is
+// collapsed to a single clean bullet. Replaces the empty "-" placeholder on
+// the first entry; otherwise adds a new bullet after the last one.
+export function appendLog(iso, text, schema) {
+  const rel = dailyRel(iso, schema);
+  if (!exists(rel)) createDailyFromTemplate(iso, schema);
+  let raw = read(rel);
+  const heading = logHeading(schema);
+  const entry = `- **${hhmm()}** ${String(text).replace(/\s*\n\s*/g, ' ').trim()}`;
+
+  const lines = raw.split('\n');
+  const range = logSectionRange(lines, heading);
+  if (!range) {
+    raw = ensureTrailingNewline(raw) + `\n${heading}\n\n${entry}\n`;
+    write(rel, raw);
+    return getDaily(iso, schema);
+  }
+  const body = lines.slice(range.hIdx + 1, range.end);
+  const content = body.filter((l) => l.trim().length > 0);
+  const onlyPlaceholder = content.length === 0 || (content.length === 1 && content[0].trim() === '-');
+  let newBody;
+  if (onlyPlaceholder) {
+    newBody = ['', entry, ''];
+  } else {
+    let lastContentIdx = -1;
+    body.forEach((l, i) => { if (l.trim().length) lastContentIdx = i; });
+    newBody = [...body.slice(0, lastContentIdx + 1), entry, ...body.slice(lastContentIdx + 1)];
+  }
+  const rebuilt = [...lines.slice(0, range.hIdx + 1), ...newBody, ...lines.slice(range.end)];
+  write(rel, rebuilt.join('\n'));
+  return getDaily(iso, schema);
 }
 
 // ---- finance --------------------------------------------------------------

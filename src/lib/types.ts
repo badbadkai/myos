@@ -18,6 +18,7 @@ export interface Schema {
     frontmatter: SchemaField[];
     checkboxes: SchemaCheckbox[];
     habitsSection: string;
+    logSection: string;
   };
   finance: {
     raw: string;
@@ -31,11 +32,16 @@ export interface Schema {
   inbox: { path: string; note?: string };
 }
 
+export interface LogEntry {
+  time: string;
+  text: string;
+}
 export interface Daily {
   date: string;
   exists: boolean;
   frontmatter: Record<string, unknown>;
   habits: Record<string, boolean>;
+  log: LogEntry[];
 }
 
 export interface DebtView {

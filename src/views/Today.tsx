@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, todayIso } from '../lib/api';
-import type { Schema, Daily } from '../lib/types';
+import type { Schema, Daily, LogEntry } from '../lib/types';
 import { useToast } from '../lib/ui';
 
 export default function Today({ schema }: { schema: Schema }) {
@@ -57,6 +57,14 @@ export default function Today({ schema }: { schema: Schema }) {
     } catch (e) { toast((e as Error).message, 'err'); }
   };
 
+  const addLog = async (text: string) => {
+    try {
+      const res = await api.addLog(date, text);
+      setDaily(res);
+      toast('Added to log');
+    } catch (e) { toast((e as Error).message, 'err'); throw e; }
+  };
+
   const shift = (days: number) => {
     const [y, m, d] = date.split('-').map(Number);
     const nd = new Date(y, m - 1, d + days);
@@ -77,6 +85,9 @@ export default function Today({ schema }: { schema: Schema }) {
       {daily && !daily.exists && (
         <p className="text-xs text-amber">No note yet for this day — saving will create it from the template.</p>
       )}
+
+      {/* log — timestamped brain dump */}
+      <LogPanel entries={daily?.log ?? []} onAppend={addLog} />
 
       {/* counters (smoked etc.) */}
       {counters.length > 0 && (
@@ -171,6 +182,46 @@ export default function Today({ schema }: { schema: Schema }) {
       </button>
 
       <InboxCapture />
+    </div>
+  );
+}
+
+function LogPanel({ entries, onAppend }: { entries: LogEntry[]; onAppend: (text: string) => Promise<void> }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    try { await onAppend(text.trim()); setText(''); }
+    catch { /* toast shown upstream, keep the draft */ }
+    setBusy(false);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
+  };
+  return (
+    <div className="panel">
+      <p className="label mb-3">Log — brain dump</p>
+      {entries.length > 0 && (
+        <ul className="flex flex-col gap-2 mb-3">
+          {entries.map((e, i) => (
+            <li key={i} className="text-sm flex gap-2.5">
+              {e.time && <span className="font-head text-[11px] text-dim tabular-nums pt-0.5 shrink-0">{e.time}</span>}
+              <span className="text-ink whitespace-pre-wrap break-words">{e.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <textarea
+        className="field resize-y min-h-[60px]"
+        placeholder="What's on your mind… (⌘/Ctrl+Enter to log)"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={onKey}
+      />
+      <button className="btn-primary mt-3 w-full" disabled={busy || !text.trim()} onClick={send}>
+        {busy ? 'Logging…' : 'Add to log'}
+      </button>
     </div>
   );
 }
