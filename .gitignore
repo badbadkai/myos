@@ -9,3 +9,4 @@ dist-ssr
 .vite
 *.log
 server/.vaultpath
+scratch
