@@ -70,7 +70,7 @@ export function verifyToken(token) {
 // e.g. an iOS Shortcut pushing step counts — authenticate without the browser
 // login flow. Sent as the `X-API-Key` header.
 function apiKeyOk(req) {
-  const key = req.headers['x-api-key'];
+  const key = req.headers['x-api-key'] || (req.query && req.query.key);
   const want = cfg().apiKey;
   if (!key || !want) return false;
   const a = Buffer.from(String(key));

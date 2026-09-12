@@ -102,7 +102,8 @@ app.post('/api/daily/log', h((req, res) => {
 // Built for an iOS Shortcut automation authenticating with the X-API-Key header.
 app.post('/api/daily/steps', h((req, res) => {
   const schema = getSchema();
-  const { date, steps } = req.body;
+  const date = req.body.date || req.query.date;
+  const steps = req.body.steps ?? req.query.steps;
   const n = Number(steps);
   if (!Number.isFinite(n)) throw new Error('steps (number) required');
   res.json(setDailyFields(date || todayIso(), { steps: Math.round(n) }, schema));
