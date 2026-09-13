@@ -15,15 +15,30 @@ export const auth = {
 // Thrown on a 401 so the app can drop to the login screen.
 export class AuthError extends Error {}
 
+// A slow or dead bridge should fail fast to the offline screen rather than
+// hang the whole app on a pending fetch.
+const TIMEOUT_MS = 8000;
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const token = auth.get();
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...opts,
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...opts,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw new Error('Bridge timed out — is it running?');
+    throw new Error('Cannot reach the bridge.');
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401) {
     auth.clear();
     throw new AuthError('Session expired — please sign in again.');
@@ -37,7 +52,9 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => req<{ ok: boolean; vault: string; today: string }>('/health'),
+  // The live online probe: never served from the SW cache, so "offline" means
+  // the bridge is genuinely unreachable rather than just slow.
+  health: () => req<{ ok: boolean; vault: string; today: string }>('/health', { cache: 'no-store' }),
   login: async (email: string, password: string) => {
     const r = await req<{ token: string; email: string }>('/login', {
       method: 'POST', body: JSON.stringify({ email, password }),

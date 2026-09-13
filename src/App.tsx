@@ -61,13 +61,13 @@ export default function App() {
     return (
       <div className="min-h-full flex items-center justify-center px-6">
         <div className="panel border-pink max-w-sm w-full">
-          <p className="font-head uppercase text-xs tracking-wide mb-1 text-pink">Bridge offline</p>
+          <p className="font-head uppercase text-xs tracking-wide mb-1 text-pink">Can't reach the vault</p>
           <p className="text-sm text-ink">{err}</p>
           <p className="text-xs text-dim mt-2">
-            Start the bridge on the PC holding the vault: <code>npm start</code> (or <code>npm run dev:bridge</code>),
-            and make sure the SILVER drive is mounted. The bridge must be running for myOS to reach the vault.
+            myOS talks to a small bridge running on your PC. Make sure that PC is on and connected,
+            then try again. Already-loaded data still shows; saving needs the bridge.
           </p>
-          <button className="btn-primary w-full mt-4" onClick={boot}>Retry</button>
+          <button className="btn-primary w-full mt-4" disabled={phase !== 'offline'} onClick={boot}>Retry</button>
         </div>
       </div>
     );
@@ -97,7 +97,7 @@ export default function App() {
               {tab === 'today' && <Today schema={schema} />}
               {tab === 'money' && <Money schema={schema} />}
               {tab === 'calendar' && <Calendar schema={schema} />}
-              {tab === 'habits' && <Habits />}
+              {tab === 'habits' && <Habits schema={schema} />}
               {tab === 'settings' && <Settings schema={schema} vault={vault} onLogout={logout} />}
             </>
           )}

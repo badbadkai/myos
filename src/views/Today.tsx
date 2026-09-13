@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, todayIso } from '../lib/api';
 import type { Schema, Daily, LogEntry } from '../lib/types';
 import { useToast } from '../lib/ui';
@@ -9,19 +9,32 @@ export default function Today({ schema }: { schema: Schema }) {
   const [daily, setDaily] = useState<Daily | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const reqId = useRef(0);
 
   const load = useCallback(async (d: string) => {
-    const res = await api.today(d);
-    setDaily(res);
-    const dr: Record<string, string> = {};
-    for (const f of schema.dailyNote.frontmatter) {
-      const v = res.frontmatter[f.key];
-      dr[f.key] = v === null || v === undefined ? '' : String(v);
+    const id = ++reqId.current;
+    setLoading(true); setError('');
+    try {
+      const res = await api.today(d);
+      if (id !== reqId.current) return; // a newer date-nav superseded this load
+      setDaily(res);
+      const dr: Record<string, string> = {};
+      for (const f of schema.dailyNote.frontmatter) {
+        const v = res.frontmatter[f.key];
+        dr[f.key] = v === null || v === undefined ? '' : String(v);
+      }
+      setDraft(dr);
+    } catch (e) {
+      if (id !== reqId.current) return;
+      setError((e as Error).message);
+    } finally {
+      if (id === reqId.current) setLoading(false);
     }
-    setDraft(dr);
   }, [schema]);
 
-  useEffect(() => { load(date).catch((e) => toast((e as Error).message, 'err')); }, [date, load, toast]);
+  useEffect(() => { load(date); }, [date, load]);
 
   const fm = schema.dailyNote.frontmatter;
   const reflection = fm.filter((f) => f.group === 'reflection' && !f.counter);
@@ -44,17 +57,33 @@ export default function Today({ schema }: { schema: Schema }) {
   };
 
   const toggleHabit = async (habitKey: string, checked: boolean) => {
+    const prev = daily;
+    // optimistic: flip the toggle immediately, roll back if the write fails
+    setDaily((d) => (d ? { ...d, habits: { ...d.habits, [habitKey]: checked } } : d));
     try {
       setDaily(await api.setHabit(date, habitKey, checked));
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      setDaily(prev);
+      toast((e as Error).message, 'err');
+    }
   };
 
   const bump = async (field: string, delta: number) => {
+    const prev = daily;
+    const cur = Number(daily?.frontmatter[field] ?? 0) || 0;
+    const next = Math.max(0, cur + delta);
+    // optimistic: move the counter now, roll back if the write fails
+    setDaily((d) => (d ? { ...d, frontmatter: { ...d.frontmatter, [field]: next } } : d));
+    setDraft((d) => ({ ...d, [field]: String(next) }));
     try {
       const res = await api.bumpCounter(date, field, delta);
       setDaily(res);
       setDraft((d) => ({ ...d, [field]: String(res.frontmatter[field] ?? 0) }));
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      setDaily(prev);
+      setDraft((d) => ({ ...d, [field]: String(prev?.frontmatter[field] ?? 0) }));
+      toast((e as Error).message, 'err');
+    }
   };
 
   const addLog = async (text: string) => {
@@ -82,7 +111,11 @@ export default function Today({ schema }: { schema: Schema }) {
           <button className="chip" onClick={() => setDate(todayIso())}>Today</button>
         )}
       </div>
-      {daily && !daily.exists && (
+      {loading && <p className="text-xs text-dim">Loading…</p>}
+      {error && !loading && (
+        <p className="text-xs text-pink">Couldn't load this day: {error}</p>
+      )}
+      {daily && !loading && !error && !daily.exists && (
         <p className="text-xs text-amber">No note yet for this day — saving will create it from the template.</p>
       )}
 
@@ -205,7 +238,7 @@ function LogPanel({ entries, onAppend }: { entries: LogEntry[]; onAppend: (text:
       {entries.length > 0 && (
         <ul className="flex flex-col gap-2 mb-3">
           {entries.map((e, i) => (
-            <li key={i} className="text-sm flex gap-2.5">
+            <li key={`${i}-${e.time}`} className="text-sm flex gap-2.5">
               {e.time && <span className="font-head text-[11px] text-dim tabular-nums pt-0.5 shrink-0">{e.time}</span>}
               <span className="text-ink whitespace-pre-wrap break-words">{e.text}</span>
             </li>
@@ -214,7 +247,7 @@ function LogPanel({ entries, onAppend }: { entries: LogEntry[]; onAppend: (text:
       )}
       <textarea
         className="field resize-y min-h-[60px]"
-        placeholder="What's on your mind… (⌘/Ctrl+Enter to log)"
+        placeholder="What's on your mind…"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKey}

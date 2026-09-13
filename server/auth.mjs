@@ -53,12 +53,14 @@ export function issueToken() {
 }
 
 export function verifyToken(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
-  const [p, sig] = token.split('.');
-  const expected = sign(p);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [p, sig] = parts;
+  // Compare the decoded signature bytes in constant time.
+  const a = Buffer.from(sig, 'base64url');
+  const b = Buffer.from(sign(p), 'base64url');
+  if (a.length === 0 || a.length !== b.length || !timingSafeEqual(a, b)) return null;
   let payload;
   try { payload = JSON.parse(Buffer.from(p.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); }
   catch { return null; }

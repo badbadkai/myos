@@ -6,15 +6,18 @@ import { useToast, money } from '../lib/ui';
 export default function Money({ schema }: { schema: Schema }) {
   const toast = useToast();
   const [sum, setSum] = useState<FinanceSummary | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setSum(await api.finance()); } catch (e) { toast((e as Error).message, 'err'); }
+    finally { setLoading(false); }
   }, [toast]);
   useEffect(() => { load(); }, [load]);
 
   return (
     <div className="flex flex-col gap-4">
-      <Balance sum={sum} />
+      <Balance sum={sum} loading={loading} />
       <Capture schema={schema} onDone={(s) => setSum(s)} />
       <Snapshot onDone={(s) => setSum(s)} />
       {sum && <BudgetPace sum={sum} />}
@@ -25,12 +28,12 @@ export default function Money({ schema }: { schema: Schema }) {
   );
 }
 
-function Balance({ sum }: { sum: FinanceSummary | null }) {
+function Balance({ sum, loading }: { sum: FinanceSummary | null; loading: boolean }) {
   return (
     <div className="panel text-center">
       <p className="label">Banked · account main</p>
       <p className="font-head text-4xl font-bold text-oxblood mt-1">
-        {sum ? money(sum.banked) : '—'}
+        {sum ? money(sum.banked) : loading ? '…' : '—'}
       </p>
       {sum && (
         <p className="text-xs text-dim mt-2">
@@ -57,13 +60,13 @@ function Capture({ schema, onDone }: { schema: Schema; onDone: (s: FinanceSummar
 
   const submit = async () => {
     const a = Number(amount);
-    if (!a || Number.isNaN(a)) { toast('Enter an amount', 'err'); return; }
+    if (amount.trim() === '' || !Number.isFinite(a)) { toast('Enter an amount', 'err'); return; }
     setBusy(true);
     try {
       const signed = sign === 'out' ? -Math.abs(a) : Math.abs(a);
       const s = await api.addTransaction({ date, amount: signed, category, note });
       onDone(s);
-      setAmount(''); setNote('');
+      setAmount(''); setNote(''); setDate(todayIso());
       toast('Transaction logged');
     } catch (e) { toast((e as Error).message, 'err'); }
     setBusy(false);
@@ -82,7 +85,10 @@ function Capture({ schema, onDone }: { schema: Schema; onDone: (s: FinanceSummar
       setNote((n) => (n ? `${n} ${text}` : text));
     };
     r.onend = () => setListening(false);
-    r.onerror = () => setListening(false);
+    r.onerror = (e: any) => {
+      setListening(false);
+      if (e?.error !== 'aborted' && e?.error !== 'no-speech') toast('Voice capture failed', 'err');
+    };
     recog.current = r; r.start(); setListening(true);
   };
 
@@ -124,7 +130,7 @@ function Snapshot({ onDone }: { onDone: (s: FinanceSummary) => void }) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     const t = Number(total);
-    if (Number.isNaN(t)) { toast('Enter a balance', 'err'); return; }
+    if (total.trim() === '' || !Number.isFinite(t)) { toast('Enter a balance', 'err'); return; }
     setBusy(true);
     try {
       onDone(await api.addSnapshot({ total: t, parts }));
@@ -151,8 +157,9 @@ function Snapshot({ onDone }: { onDone: (s: FinanceSummary) => void }) {
 }
 
 function BudgetPace({ sum }: { sum: FinanceSummary }) {
-  const dayOfMonth = new Date().getDate();
-  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const expectedFrac = dayOfMonth / daysInMonth;
   const cats = Object.keys(sum.budgets);
   return (
@@ -237,7 +244,7 @@ function Recent({ sum }: { sum: FinanceSummary }) {
       <p className="label mb-3">Recent</p>
       <div className="flex flex-col gap-1.5">
         {sum.recent.map((t, i) => (
-          <div key={i} className="flex items-center justify-between text-sm border-b border-edge/50 last:border-0 pb-1.5 last:pb-0">
+          <div key={`${t.date}-${i}-${t.amount}`} className="flex items-center justify-between text-sm border-b border-edge/50 last:border-0 pb-1.5 last:pb-0">
             <div className="min-w-0">
               <p className="truncate">{t.note || t.category}</p>
               <p className="text-xs text-dim">{t.date} · {t.category}</p>

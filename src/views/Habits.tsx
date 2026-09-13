@@ -1,18 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import type { Streaks } from '../lib/types';
+import type { Schema, Streaks } from '../lib/types';
 import { useToast } from '../lib/ui';
 
-const LABELS: Record<string, string> = {
-  trained: 'Trained', journaled: 'Journaled', meditated: 'Meditated', skincare: 'Skincare',
-};
-
-export default function Habits() {
+export default function Habits({ schema }: { schema: Schema }) {
   const toast = useToast();
   const [s, setS] = useState<Streaks | null>(null);
-  useEffect(() => {
+
+  // Labels come from the schema so they stay in lock-step with the daily note.
+  const LABELS: Record<string, string> = Object.fromEntries(
+    schema.dailyNote.checkboxes.map((c) => [c.habitKey, c.label]),
+  );
+
+  const refresh = useCallback(() => {
     api.streaks().then(setS).catch((e) => toast((e as Error).message, 'err'));
   }, [toast]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Habits roll over at day close and can be toggled elsewhere, so re-pull
+  // whenever the tab regains focus.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [refresh]);
 
   if (!s) return <p className="text-dim text-sm">Loading habits…</p>;
   const keys = Object.keys(s.streaks);
@@ -21,7 +37,10 @@ export default function Habits() {
   return (
     <div className="flex flex-col gap-4">
       <div className="panel">
-        <p className="label mb-3">Streaks</p>
+        <div className="flex justify-between items-center mb-3">
+          <p className="label">Streaks</p>
+          <button className="chip" onClick={refresh}>Refresh</button>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           {keys.map((k) => (
             <div key={k} className="flex flex-col items-center bg-cream border border-edge rounded-lg py-3">
@@ -40,7 +59,7 @@ export default function Habits() {
               <span className="font-head uppercase text-xs tracking-wide w-24">{LABELS[k] ?? k}</span>
               <div className="flex gap-1.5">
                 {(s.last7[k] ?? []).map((on, i) => (
-                  <span key={i} className={`w-5 h-5 rounded-full ${on ? 'bg-green' : 'bg-edge'}`} />
+                  <span key={s.days[i] ?? i} className={`w-5 h-5 rounded-full ${on ? 'bg-green' : 'bg-edge'}`} />
                 ))}
               </div>
             </div>

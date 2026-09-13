@@ -37,6 +37,8 @@ export default function Calendar({ schema }: { schema: Schema }) {
   const [anchor, setAnchor] = useState(new Date());
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [editing, setEditing] = useState<Partial<CalEvent> | null>(null);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const range = useCallback(() => {
     if (view === 'month') {
@@ -53,7 +55,9 @@ export default function Calendar({ schema }: { schema: Schema }) {
 
   const load = useCallback(async () => {
     const { from, to } = range();
+    setLoadingEvents(true);
     try { setEvents(await api.events(from, to)); } catch (e) { toast((e as Error).message, 'err'); }
+    finally { setLoadingEvents(false); }
   }, [range, toast]);
   useEffect(() => { load(); }, [load]);
 
@@ -64,12 +68,18 @@ export default function Calendar({ schema }: { schema: Schema }) {
   };
 
   const save = async (ev: Partial<CalEvent>) => {
+    if (busy) return; // guard against a double-tap creating duplicate rows
+    setBusy(true);
     try { await api.upsertEvent(ev); setEditing(null); await load(); toast('Event saved'); }
     catch (e) { toast((e as Error).message, 'err'); }
+    finally { setBusy(false); }
   };
   const remove = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
     try { await api.deleteEvent(id); setEditing(null); await load(); toast('Event deleted'); }
     catch (e) { toast((e as Error).message, 'err'); }
+    finally { setBusy(false); }
   };
 
   const title = view === 'month'
@@ -104,6 +114,8 @@ export default function Calendar({ schema }: { schema: Schema }) {
         }}>+ Event</button>
       </div>
 
+      {loadingEvents && <p className="text-xs text-dim">Loading events…</p>}
+
       {view === 'month' && <MonthGrid anchor={anchor} events={events} onPick={(d) => { setAnchor(d); setView('day'); }} />}
       {view === 'week' && <TimeGrid days={weekDays(anchor)} events={events} onCreate={openCreate(setEditing)} onEdit={setEditing} />}
       {view === 'day' && <TimeGrid days={[anchor]} events={events} onCreate={openCreate(setEditing)} onEdit={setEditing} />}
@@ -112,6 +124,7 @@ export default function Calendar({ schema }: { schema: Schema }) {
         <EventEditor
           schema={schema}
           ev={editing}
+          busy={busy}
           onChange={setEditing}
           onSave={save}
           onDelete={remove}
@@ -258,8 +271,7 @@ function MonthGrid({ anchor, events, onPick }: { anchor: Date; events: CalEvent[
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const gridStart = startOfWeek(first);
   const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
-  const last = cells[cells.length - 1];
-  const weeks = last.getDate() < 7 && last.getMonth() !== anchor.getMonth() ? 6 : 6;
+  const weeks = 6;
 
   return (
     <div className="panel p-2">
@@ -294,24 +306,37 @@ function MonthGrid({ anchor, events, onPick }: { anchor: Date; events: CalEvent[
 }
 
 // ---- event editor ----------------------------------------------------------
-function EventEditor({ schema, ev, onChange, onSave, onDelete, onClose }: {
-  schema: Schema; ev: Partial<CalEvent>;
+function EventEditor({ schema, ev, busy, onChange, onSave, onDelete, onClose }: {
+  schema: Schema; ev: Partial<CalEvent>; busy: boolean;
   onChange: (e: Partial<CalEvent>) => void;
   onSave: (e: Partial<CalEvent>) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
+  // Snapshot the event as first opened so a backdrop tap can warn before
+  // discarding edits. EventEditor remounts each time the modal opens.
+  const originalRef = useRef(JSON.stringify(ev));
   const set = (patch: Partial<CalEvent>) => onChange({ ...ev, ...patch });
   const allday = !!ev.allday;
+  const dirty = JSON.stringify(ev) !== originalRef.current;
+  const tryClose = () => {
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    onClose();
+  };
+  const del = () => {
+    if (!ev.id) return;
+    if (!window.confirm('Delete this event?')) return;
+    onDelete(ev.id);
+  };
   return (
-    <div className="fixed inset-0 z-40 bg-ink/40 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-ink/40 flex items-end sm:items-center justify-center p-4" onClick={tryClose}>
       <div className="panel w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3">
           <p className="label">{ev.id ? 'Edit event' : 'New event'}</p>
-          <button className="text-dim text-xl leading-none" onClick={onClose}>×</button>
+          <button className="text-dim text-xl leading-none" onClick={tryClose}>×</button>
         </div>
         <div className="flex flex-col gap-3">
-          <input className="field text-lg" placeholder="Title" autoFocus value={ev.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
+          <input className="field text-lg" placeholder="Title" value={ev.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={allday} onChange={(e) => set({ allday: e.target.checked })} />
@@ -344,8 +369,8 @@ function EventEditor({ schema, ev, onChange, onSave, onDelete, onClose }: {
           <textarea className="field resize-y min-h-[60px]" placeholder="Notes" value={ev.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} />
 
           <div className="flex gap-2">
-            {ev.id && <button className="btn-ghost text-pink border-pink" onClick={() => onDelete(ev.id!)}>Delete</button>}
-            <button className="btn-primary flex-1" onClick={() => onSave(ev)}>Save</button>
+            {ev.id && <button className="btn-ghost text-pink border-pink" disabled={busy} onClick={del}>Delete</button>}
+            <button className="btn-primary flex-1" disabled={busy} onClick={() => onSave(ev)}>{busy ? 'Saving…' : 'Save'}</button>
           </div>
         </div>
       </div>

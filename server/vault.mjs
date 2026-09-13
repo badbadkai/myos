@@ -48,6 +48,7 @@ export function getSchema() {
 // ---- CSV helpers (append-only + in-place edit) ----------------------------
 function parseCsv(text) {
   const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.length > 0);
+  if (!lines.length) return { header: [], rows: [] };
   const header = splitCsvLine(lines[0]);
   const rows = lines.slice(1).map((l) => {
     const cells = splitCsvLine(l);
@@ -151,7 +152,7 @@ export function setDailyFields(iso, fields, schema) {
   const rel = dailyRel(iso, schema);
   if (!exists(rel)) createDailyFromTemplate(iso, schema);
   let raw = read(rel);
-  const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fmMatch) {
     // no frontmatter block — prepend one
     const lines = Object.entries(fields).map(([k, v]) => `${k}:${fmScalar(v)}`);
@@ -166,7 +167,7 @@ export function setDailyFields(iso, fields, schema) {
     if (keyRe.test(block)) block = block.replace(keyRe, line);
     else block = `${block}\n${line}`;
   }
-  raw = raw.replace(/^---\n[\s\S]*?\n---/, `---\n${block}\n---`);
+  raw = raw.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${block}\n---`);
   write(rel, raw);
   return getDaily(iso, schema);
 }
@@ -267,7 +268,7 @@ export function appendLog(iso, text, schema) {
     newBody = [...body.slice(0, lastContentIdx + 1), entry, ...body.slice(lastContentIdx + 1)];
   }
   const rebuilt = [...lines.slice(0, range.hIdx + 1), ...newBody, ...lines.slice(range.end)];
-  write(rel, rebuilt.join('\n'));
+  write(rel, ensureTrailingNewline(rebuilt.join('\n')));
   return getDaily(iso, schema);
 }
 
@@ -332,8 +333,12 @@ function writeBankedToLondonFund(schema, banked) {
   if (!exists(rel)) return;
   let raw = read(rel);
   const v = banked.toFixed(2);
-  if (/banked::\s*[\d.]+/.test(raw)) {
-    raw = raw.replace(/banked::\s*[\d.]+/, `banked:: ${v}`);
+  // Anchor to line start so a key like `subfloor::` can't be mis-matched, and
+  // allow a negative value so a negative balance actually writes. Surgical
+  // single-line replace; floor::/full::/deadline:: are never touched.
+  const re = /^banked::.*$/m;
+  if (re.test(raw)) {
+    raw = raw.replace(re, `banked:: ${v}`);
     write(rel, raw);
   }
 }
@@ -364,7 +369,7 @@ export function financeSummary(schema) {
   if (exists(lf)) {
     const raw = read(lf);
     const inline = (key) => {
-      const m = raw.match(new RegExp(`${key}::\\s*([\\d.]+)`));
+      const m = raw.match(new RegExp(`^${escapeRe(key)}::\\s*(-?[\\d.]+)`, 'm'));
       return m ? Number(m[1]) : NaN;
     };
     const floor = inline('floor');
@@ -378,7 +383,7 @@ export function financeSummary(schema) {
   return {
     banked, monthKey, monthIn: round2(monthIn), monthOut: round2(monthOut),
     net: round2(monthIn - monthOut), byCategory, budgets, debts: debtView, london,
-    recent: txs.slice(-8).reverse(),
+    recent: [...txs].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-8).reverse(),
   };
 }
 
@@ -403,26 +408,45 @@ export function addSnapshot(schema, { date, total, parts }) {
 }
 
 // ---- habits.csv streaks ---------------------------------------------------
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function habitStreaks(schema) {
+  const keys = schema.dailyNote.checkboxes.map((c) => c.habitKey);
   const rel = schema.habits.csv;
-  if (!exists(rel)) return { rows: [], streaks: {}, last7: {} };
+  const empty = { streaks: {}, last7: {}, smokedRecent: [], days: [] };
+  if (!exists(rel)) return empty;
   const rows = parseCsv(read(rel)).rows.filter((r) => r.date);
-  rows.sort((a, b) => (a.date < b.date ? -1 : 1));
-  const keys = ['trained', 'journaled', 'meditated', 'skincare'];
+  const byDate = {};
+  for (const r of rows) byDate[r.date] = r;
   const truthy = (v) => v === '1' || v === 'true' || v === 'x' || v === 'yes' || v === 'TRUE';
+
+  // Streak = consecutive calendar days (anchored to today) the habit was done.
+  // If today's row hasn't been rolled in yet (habits close at end of day),
+  // anchor at yesterday so an unclosed today doesn't zero the streak.
+  const today = isoDaysAgo(0);
+  const hasToday = !!byDate[today];
   const streaks = {};
   for (const k of keys) {
     let s = 0;
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if (truthy(rows[i][k])) s++; else break;
+    for (let i = hasToday ? 0 : 1; ; i++) {
+      const row = byDate[isoDaysAgo(i)];
+      if (row && truthy(row[k])) s++; else break;
     }
     streaks[k] = s;
   }
+
+  // Last-7 dots over the 7 calendar days ending today (oldest first), so a
+  // missing day reads as a miss rather than shifting the window.
+  const days = [];
+  for (let i = 6; i >= 0; i--) days.push(isoDaysAgo(i));
   const last7 = {};
-  const recent = rows.slice(-7);
-  for (const k of keys) last7[k] = recent.map((r) => truthy(r[k]));
-  const smokedRecent = recent.map((r) => ({ date: r.date, smoked: Number(r.smoked) || 0 }));
-  return { streaks, last7, smokedRecent, days: recent.map((r) => r.date) };
+  for (const k of keys) last7[k] = days.map((d) => !!(byDate[d] && truthy(byDate[d][k])));
+  const smokedRecent = days.map((d) => ({ date: d, smoked: Number(byDate[d]?.smoked) || 0 }));
+  return { streaks, last7, smokedRecent, days };
 }
 
 // ---- calendar events ------------------------------------------------------

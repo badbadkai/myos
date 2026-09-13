@@ -19,6 +19,28 @@ import { loadAuth, verifyPassword, issueToken, requireAuth } from './auth.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.MYOS_BRIDGE_PORT) || 4177;
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_TEXT = 5000;
+
+// A client-fault error the h() wrapper surfaces as a 400 (not a 500).
+function bad(msg) { const e = new Error(msg); e.status = 400; return e; }
+
+// `date` flows into the daily-note file path, so a bad value is both a 400 and
+// a path-traversal guard. Defaults to today when omitted.
+function reqDate(d) {
+  const iso = d || todayIso();
+  if (!DATE_RE.test(iso)) throw bad('date must be YYYY-MM-DD');
+  return iso;
+}
+
+// Strip absolute filesystem paths out of messages before they reach the client,
+// leaving only the basename so fs errors don't leak the vault layout.
+function scrub(msg) {
+  return String(msg || 'error')
+    .replace(/[A-Za-z]:\\[^\s'"]*[\\]([^\s'"\\]+)/g, '$1')
+    .replace(/\/(?:[^\s'"/]+\/)+([^\s'"/]+)/g, '$1');
+}
+
 const app = express();
 // Private Network Access: a public HTTPS page (e.g. the GitHub Pages site) making
 // a request to this localhost bridge triggers a preflight carrying
@@ -33,13 +55,16 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-// small async wrapper so thrown errors become 500s, not unhandled rejections
+// small async wrapper: client-fault errors (err.status) surface as that code;
+// everything else is a 500. Absolute paths are scrubbed from the client message,
+// and only genuine server faults are logged.
 const h = (fn) => (req, res) => {
   Promise.resolve()
     .then(() => fn(req, res))
     .catch((err) => {
-      console.error(`[myos] ${req.method} ${req.path} —`, err.message);
-      res.status(500).json({ error: err.message });
+      const status = err.status || 500;
+      if (status >= 500) console.error(`[myos] ${req.method} ${req.path} —`, err.message);
+      res.status(status).json({ error: scrub(err.message) });
     });
 };
 
@@ -69,33 +94,37 @@ app.get('/api/schema', h((req, res) => {
 // ---- daily note -----------------------------------------------------------
 app.get('/api/today', h((req, res) => {
   const schema = getSchema();
-  const iso = req.query.date || todayIso();
-  res.json(getDaily(iso, schema));
+  res.json(getDaily(reqDate(req.query.date), schema));
 }));
 
 app.post('/api/daily/fields', h((req, res) => {
   const schema = getSchema();
   const { date, fields } = req.body;
-  res.json(setDailyFields(date || todayIso(), fields || {}, schema));
+  res.json(setDailyFields(reqDate(date), fields || {}, schema));
 }));
 
 app.post('/api/daily/habit', h((req, res) => {
   const schema = getSchema();
   const { date, habitKey, checked } = req.body;
-  res.json(setHabit(date || todayIso(), habitKey, !!checked, schema));
+  res.json(setHabit(reqDate(date), habitKey, !!checked, schema));
 }));
 
 app.post('/api/daily/counter', h((req, res) => {
   const schema = getSchema();
   const { date, field, delta } = req.body;
-  res.json(bumpCounter(date || todayIso(), field, Number(delta) || 0, schema));
+  const n = Number(delta);
+  if (!Number.isFinite(n)) throw bad('delta must be a finite number');
+  const keys = schema.dailyNote.frontmatter.map((f) => f.key);
+  if (!keys.includes(field)) throw bad('unknown counter field');
+  res.json(bumpCounter(reqDate(date), field, n, schema));
 }));
 
 app.post('/api/daily/log', h((req, res) => {
   const schema = getSchema();
   const { date, text } = req.body;
-  if (!text || !text.trim()) throw new Error('text required');
-  res.json(appendLog(date || todayIso(), text.trim(), schema));
+  if (!text || !text.trim()) throw bad('text required');
+  if (text.length > MAX_TEXT) throw bad(`text too long (max ${MAX_TEXT} chars)`);
+  res.json(appendLog(reqDate(date), text.trim(), schema));
 }));
 
 // Step count push — written to the daily note's `steps` frontmatter field.
@@ -105,8 +134,8 @@ app.post('/api/daily/steps', h((req, res) => {
   const date = req.body.date || req.query.date;
   const steps = req.body.steps ?? req.query.steps;
   const n = Number(steps);
-  if (!Number.isFinite(n)) throw new Error('steps (number) required');
-  res.json(setDailyFields(date || todayIso(), { steps: Math.round(n) }, schema));
+  if (!Number.isFinite(n)) throw bad('steps (number) required');
+  res.json(setDailyFields(reqDate(date), { steps: Math.round(n) }, schema));
 }));
 
 // Reflection reminder — returns plain reminder text when today's reflection
@@ -115,7 +144,7 @@ app.post('/api/daily/steps', h((req, res) => {
 // body has any text. Key rides in the query string like the steps push.
 app.get('/api/daily/reflection-due', h((req, res) => {
   const schema = getSchema();
-  const iso = req.query.date || todayIso();
+  const iso = reqDate(req.query.date);
   const daily = getDaily(iso, schema);
   const fm = daily.frontmatter || {};
   const fields = schema.dailyNote.frontmatter.filter((f) => f.group === 'reflection' && f.type === 'text');
@@ -134,16 +163,22 @@ app.get('/api/finance/summary', h((req, res) => {
 app.post('/api/finance/transaction', h((req, res) => {
   const schema = getSchema();
   const { date, amount, category, note } = req.body;
-  if (amount === undefined || amount === null || amount === '') throw new Error('amount required');
-  if (!category) throw new Error('category required');
-  res.json(addTransaction(schema, { date, amount, category, note }));
+  const n = Number(amount);
+  if (amount === undefined || amount === null || String(amount).trim() === '' || !Number.isFinite(n)) {
+    throw bad('amount must be a finite number');
+  }
+  if (!category) throw bad('category required');
+  res.json(addTransaction(schema, { date: reqDate(date), amount: n, category, note }));
 }));
 
 app.post('/api/finance/snapshot', h((req, res) => {
   const schema = getSchema();
   const { date, total, parts } = req.body;
-  if (total === undefined || total === null || total === '') throw new Error('total required');
-  res.json(addSnapshot(schema, { date, total, parts }));
+  const n = Number(total);
+  if (total === undefined || total === null || String(total).trim() === '' || !Number.isFinite(n)) {
+    throw bad('total must be a finite number');
+  }
+  res.json(addSnapshot(schema, { date: reqDate(date), total: n, parts }));
 }));
 
 // ---- habits ---------------------------------------------------------------
@@ -174,7 +209,8 @@ app.delete('/api/calendar/events/:id', h((req, res) => {
 app.post('/api/inbox', h((req, res) => {
   const schema = getSchema();
   const { text } = req.body;
-  if (!text || !text.trim()) throw new Error('text required');
+  if (!text || !text.trim()) throw bad('text required');
+  if (text.length > MAX_TEXT) throw bad(`text too long (max ${MAX_TEXT} chars)`);
   res.json(captureInbox(schema, text.trim()));
 }));
 
