@@ -15,6 +15,19 @@ export default function Money({ schema }: { schema: Schema }) {
   }, [toast]);
   useEffect(() => { load(); }, [load]);
 
+  // The balance can move from elsewhere (Obsidian, the reconcile script, another
+  // device), so re-pull whenever the tab regains focus rather than showing stale
+  // numbers. Keeps the sum fresh without a manual reload.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', load);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', load);
+    };
+  }, [load]);
+
   return (
     <div className="flex flex-col gap-4">
       <Balance sum={sum} loading={loading} />
