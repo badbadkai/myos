@@ -133,8 +133,12 @@ app.post('/api/daily/steps', h((req, res) => {
   const schema = getSchema();
   const date = req.body.date || req.query.date;
   const steps = req.body.steps ?? req.query.steps;
-  const n = Number(steps);
-  if (!Number.isFinite(n)) throw bad('steps (number) required');
+  // iOS Health hands the step count to the Shortcut as a formatted quantity
+  // (thousands comma + a "steps" unit label), so accept any string and keep
+  // only the digits/decimal before parsing.
+  const cleaned = String(steps ?? '').replace(/[^0-9.]/g, '');
+  const n = Number(cleaned);
+  if (cleaned === '' || !Number.isFinite(n)) throw bad('steps (number) required');
   res.json(setDailyFields(reqDate(date), { steps: Math.round(n) }, schema));
 }));
 
