@@ -97,6 +97,14 @@ export function todayIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// Local wall-clock timestamp, second precision. This is the ledger ordering key:
+// a new row stamped now sorts after every migrated/prior row, so a fresh
+// transaction always drifts the live balance forward in real time.
+function nowTs() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 function fmtTemplateDate(iso, pattern) {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(y, m - 1, d);
@@ -277,19 +285,26 @@ function financeRel(schema, key) {
   return `${schema.finance.raw}/${schema.finance.files[key]}`;
 }
 
-function loadTransactions(schema) {
-  const rel = financeRel(schema, 'transactions');
+// One master ledger: every money row (snapshot | txn | forecast) lives in
+// ledger.csv, ordered by `ts`. The loaders below split it by type so the rest
+// of the finance code reads the same shapes it always did.
+function loadLedger(schema) {
+  const rel = financeRel(schema, 'ledger');
   if (!exists(rel)) return [];
   return parseCsv(read(rel)).rows.map((r) => ({
-    date: r.date, amount: Number(r.amount), category: r.category, note: r.note,
-  })).filter((r) => r.date && !Number.isNaN(r.amount));
+    ts: r.ts, date: r.date, type: r.type, account: r.account,
+    amount: Number(r.amount), category: r.category, note: r.note,
+  }));
+}
+function loadTransactions(schema) {
+  return loadLedger(schema)
+    .filter((r) => r.type === 'txn' && r.date && !Number.isNaN(r.amount))
+    .map((r) => ({ ts: r.ts, date: r.date, amount: r.amount, category: r.category, note: r.note }));
 }
 function loadBalances(schema) {
-  const rel = financeRel(schema, 'balances');
-  if (!exists(rel)) return [];
-  return parseCsv(read(rel)).rows.map((r) => ({
-    date: r.date, account: r.account, balance: Number(r.balance),
-  })).filter((r) => r.date && !Number.isNaN(r.balance));
+  return loadLedger(schema)
+    .filter((r) => r.type === 'snapshot' && r.date && !Number.isNaN(r.amount))
+    .map((r) => ({ ts: r.ts, date: r.date, account: r.account, balance: r.amount }));
 }
 function loadBudgets(schema) {
   const rel = financeRel(schema, 'budgets');
@@ -309,23 +324,19 @@ function loadDebts(schema) {
   })).filter((r) => r.creditor && !Number.isNaN(r.principal));
 }
 
-// Derived live balance = latest snapshot total + sum of transactions dated AFTER that snapshot.
+// Derived live balance = latest snapshot total + sum of transactions with `ts`
+// strictly after that snapshot. Ordering is by ts, not date, so a transaction
+// logged the same day as (but after) a snapshot still drifts the balance —
+// this is what makes the balance update in real time. Forecasts never count.
 export function derivedBalance(schema) {
-  const bals = loadBalances(schema).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const bals = loadBalances(schema);
   const txs = loadTransactions(schema);
   if (!bals.length) {
-    return txs.reduce((s, t) => s + t.amount, 0);
+    return Math.round(txs.reduce((s, t) => s + t.amount, 0) * 100) / 100;
   }
-  const snapDates = [...new Set(bals.map((b) => b.date))].sort();
-  const latest = snapDates[snapDates.length - 1];
-  const accounts = [...new Set(bals.map((b) => b.account))];
-  let snapTotal = 0;
-  for (const a of accounts) {
-    const rows = bals.filter((b) => b.account === a && b.date <= latest);
-    if (rows.length) snapTotal += rows[rows.length - 1].balance;
-  }
-  const after = txs.filter((t) => t.date > latest).reduce((s, t) => s + t.amount, 0);
-  return Math.round((snapTotal + after) * 100) / 100;
+  const latest = bals.reduce((a, b) => (a.ts > b.ts ? a : b));
+  const after = txs.filter((t) => t.ts > latest.ts).reduce((s, t) => s + t.amount, 0);
+  return Math.round((latest.balance + after) * 100) / 100;
 }
 
 function writeBankedToLondonFund(schema, banked) {
@@ -383,25 +394,30 @@ export function financeSummary(schema) {
   return {
     banked, monthKey, monthIn: round2(monthIn), monthOut: round2(monthOut),
     net: round2(monthIn - monthOut), byCategory, budgets, debts: debtView, london,
-    recent: [...txs].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-8).reverse(),
+    recent: [...txs].sort((a, b) => ((a.ts || a.date) < (b.ts || b.date) ? -1 : 1)).slice(-8).reverse(),
   };
 }
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
 export function addTransaction(schema, { date, amount, category, note }) {
-  const row = { date: date || todayIso(), amount: Number(amount).toFixed(2), category, note: note || '' };
-  appendCsvRow(financeRel(schema, 'transactions'), row);
+  const row = {
+    ts: nowTs(), date: date || todayIso(), type: 'txn', account: schema.finance.account,
+    amount: Number(amount).toFixed(2), category, note: note || '',
+  };
+  appendCsvRow(financeRel(schema, 'ledger'), row);
   const banked = derivedBalance(schema);
   writeBankedToLondonFund(schema, banked);
   return financeSummary(schema);
 }
 
 export function addSnapshot(schema, { date, total, parts }) {
-  // total is the new balance for account `main`. parts is an optional note (e.g. bank+cash breakdown).
-  const rel = financeRel(schema, 'balances');
-  const d = date || todayIso();
-  appendCsvRow(rel, { date: d, account: schema.finance.account, balance: Number(total).toFixed(2) });
+  // total is the new balance for account `main`. parts is an optional breakdown note (e.g. bank+cash).
+  const row = {
+    ts: nowTs(), date: date || todayIso(), type: 'snapshot', account: schema.finance.account,
+    amount: Number(total).toFixed(2), category: '', note: parts || '',
+  };
+  appendCsvRow(financeRel(schema, 'ledger'), row);
   const banked = derivedBalance(schema);
   writeBankedToLondonFund(schema, banked);
   return { ...financeSummary(schema), snapshotNote: parts || '' };
