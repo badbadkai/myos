@@ -25,14 +25,12 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today');
   const [schema, setSchema] = useState<Schema | null>(null);
   const [err, setErr] = useState<string>('');
-  const [vault, setVault] = useState<string>('');
   const [phase, setPhase] = useState<Phase>('checking');
 
   const boot = useCallback(async () => {
     setPhase('checking'); setErr('');
     try {
-      const hp = await api.health();
-      setVault(hp.vault);
+      await api.health();
     } catch (e) {
       setErr((e as Error).message);
       setPhase('offline');
@@ -61,11 +59,11 @@ export default function App() {
     return (
       <div className="min-h-full flex items-center justify-center px-6">
         <div className="panel border-pink max-w-sm w-full">
-          <p className="font-head uppercase text-xs tracking-wide mb-1 text-pink">Can't reach the vault</p>
+          <p className="font-head uppercase text-xs tracking-wide mb-1 text-pink">Can't connect</p>
           <p className="text-sm text-ink">{err}</p>
           <p className="text-xs text-dim mt-2">
-            myOS talks to a small bridge running on your PC. Make sure that PC is on and connected,
-            then try again. Already-loaded data still shows; saving needs the bridge.
+            myOS can't reach your home server right now. Make sure it's on and connected,
+            then try again. Anything already loaded still shows; saving needs a connection.
           </p>
           <button className="btn-primary w-full mt-4" disabled={phase !== 'offline'} onClick={boot}>Retry</button>
         </div>
@@ -86,8 +84,8 @@ export default function App() {
       <div className="min-h-full flex flex-col max-w-2xl mx-auto">
         <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3 flex items-baseline justify-between">
           <h1 className="font-head text-2xl font-bold text-oxblood tracking-tight">myOS</h1>
-          <span className="text-xs text-dim truncate max-w-[55%]" title={vault}>
-            {vault ? vault.replace(/\\/g, '/') : ''}
+          <span className="text-xs text-dim">
+            {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         </header>
 
@@ -98,7 +96,7 @@ export default function App() {
               {tab === 'money' && <Money schema={schema} />}
               {tab === 'calendar' && <Calendar schema={schema} />}
               {tab === 'habits' && <Habits schema={schema} />}
-              {tab === 'settings' && <Settings schema={schema} vault={vault} onLogout={logout} />}
+              {tab === 'settings' && <Settings onLogout={logout} />}
             </>
           )}
         </main>

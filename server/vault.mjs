@@ -501,17 +501,103 @@ export function upsertEvent(schema, ev) {
     allday: ev.allday ? '1' : '',
   };
   const idx = rows.findIndex((r) => r.id === id);
+  const old = idx >= 0 ? rows[idx] : null;
   if (idx >= 0) rows[idx] = clean; else rows.push(clean);
   writeAllEvents(schema, rows);
+  // Mirror the block into its day's note (best-effort — never fail the save).
+  try {
+    const oldDate = old ? eventDate(old) : null;
+    const newDate = eventDate(clean);
+    if (oldDate && oldDate !== newDate) syncEventToDaily(schema, { ...old, allday: old.allday === '1' }, true);
+    syncEventToDaily(schema, { ...clean, allday: !!ev.allday }, false);
+  } catch { /* schedule mirror is best-effort */ }
   return { ...clean, allday: !!ev.allday };
 }
 
 export function deleteEvent(schema, id) {
   const rel = schema.calendar.csv;
   if (!exists(rel)) return { ok: true };
-  const rows = parseCsv(read(rel)).rows.filter((r) => r.id && r.id !== id);
+  const all = parseCsv(read(rel)).rows.filter((r) => r.id);
+  const target = all.find((r) => r.id === id);
+  const rows = all.filter((r) => r.id !== id);
   writeAllEvents(schema, rows);
+  if (target) { try { syncEventToDaily(schema, { ...target, allday: target.allday === '1' }, true); } catch { /* best-effort */ } }
   return { ok: true };
+}
+
+// ---- calendar → daily note Schedule ---------------------------------------
+// Mirror each calendar event into its day's note under `## Schedule` as a task
+// line tagged with a `^ev-<id>` block id, so create/move/delete stay in sync.
+// The block id is invisible in Obsidian preview and lets us find the exact line
+// again; manual Schedule tasks are never reordered or touched.
+const SCHEDULE_HEADING = '## Schedule';
+
+function eventDate(ev) {
+  const m = String(ev?.start || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+function eventTime(dt) {
+  const m = String(dt || '').match(/T(\d{2}:\d{2})/);
+  return m ? m[1] : '';
+}
+function eventLine(ev) {
+  let when;
+  if (ev.allday) when = 'All day';
+  else {
+    const s = eventTime(ev.start), e = eventTime(ev.end);
+    when = s && e && e !== s ? `${s}-${e}` : s;
+  }
+  const bits = [];
+  if (when) bits.push(`**${when}**`);
+  bits.push(ev.title || 'Untitled');
+  if (ev.location) bits.push(`@ ${ev.location}`);
+  return `- [ ] ${bits.join(' ')} ^ev-${ev.id}`;
+}
+
+export function syncEventToDaily(schema, ev, remove = false) {
+  const iso = eventDate(ev);
+  if (!iso) return;
+  const rel = dailyRel(iso, schema);
+  if (!exists(rel)) {
+    if (remove) return;
+    createDailyFromTemplate(iso, schema);
+  }
+  const marker = `^ev-${ev.id}`;
+  // Strip any prior line for this event anywhere in the note (handles moves).
+  let lines = read(rel).split('\n').filter((l) => !l.includes(marker));
+  const range = logSectionRange(lines, SCHEDULE_HEADING);
+
+  if (remove) {
+    // If the section is now empty of tasks, restore the "- [ ]" placeholder.
+    if (range) {
+      const body = lines.slice(range.hIdx + 1, range.end);
+      if (body.every((l) => l.trim() === '')) {
+        lines = [...lines.slice(0, range.hIdx + 1), '', '- [ ]', '', ...lines.slice(range.end)];
+      }
+    }
+    write(rel, ensureTrailingNewline(lines.join('\n')));
+    return;
+  }
+
+  const line = eventLine(ev);
+  if (!range) {
+    lines = [...lines, '', SCHEDULE_HEADING, '', line, ''];
+    write(rel, ensureTrailingNewline(lines.join('\n')));
+    return;
+  }
+  const body = lines.slice(range.hIdx + 1, range.end);
+  const content = body.filter((l) => l.trim().length > 0);
+  const onlyPlaceholder = content.length === 0 || (content.length === 1 && content[0].trim() === '- [ ]');
+  let newBody;
+  if (onlyPlaceholder) {
+    newBody = ['', line, ''];
+  } else {
+    let last = -1;
+    body.forEach((l, i) => { if (l.trim().length) last = i; });
+    newBody = [...body.slice(0, last + 1), line, ...body.slice(last + 1)];
+  }
+  lines = [...lines.slice(0, range.hIdx + 1), ...newBody, ...lines.slice(range.end)];
+  write(rel, ensureTrailingNewline(lines.join('\n')));
 }
 
 // ---- inbox capture --------------------------------------------------------

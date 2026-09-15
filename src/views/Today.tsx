@@ -37,6 +37,7 @@ export default function Today({ schema }: { schema: Schema }) {
   useEffect(() => { load(date); }, [date, load]);
 
   const fm = schema.dailyNote.frontmatter;
+  const metrics = fm.filter((f) => f.group === 'metrics' && !f.counter);
   const reflection = fm.filter((f) => f.group === 'reflection' && !f.counter);
   const meals = fm.filter((f) => f.group === 'meals');
   const counters = fm.filter((f) => f.counter);
@@ -45,7 +46,7 @@ export default function Today({ schema }: { schema: Schema }) {
     setSaving(true);
     try {
       const fields: Record<string, unknown> = {};
-      for (const f of [...reflection, ...meals]) {
+      for (const f of [...metrics, ...reflection, ...meals]) {
         const raw = draft[f.key] ?? '';
         fields[f.key] = f.type === 'number' && raw !== '' ? Number(raw) : raw;
       }
@@ -117,6 +118,27 @@ export default function Today({ schema }: { schema: Schema }) {
       )}
       {daily && !loading && !error && !daily.exists && (
         <p className="text-xs text-amber">No note yet for this day — saving will create it from the template.</p>
+      )}
+
+      {/* metrics (steps, sleep) */}
+      {metrics.length > 0 && (
+        <div className="panel">
+          <p className="label mb-3">Metrics</p>
+          <div className="grid grid-cols-2 gap-3">
+            {metrics.map((f) => (
+              <label key={f.key} className="flex flex-col gap-1">
+                <span className="label">{f.label}{f.unit ? ` (${f.unit})` : ''}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="field"
+                  value={draft[f.key] ?? ''}
+                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* log — timestamped brain dump */}

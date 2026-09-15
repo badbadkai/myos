@@ -4,6 +4,7 @@ export interface SchemaField {
   type: 'number' | 'text';
   group: string;
   counter?: boolean;
+  unit?: string;
 }
 export interface SchemaCheckbox {
   label: string;

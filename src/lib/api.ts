@@ -34,8 +34,8 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
       signal: ctrl.signal,
     });
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw new Error('Bridge timed out — is it running?');
-    throw new Error('Cannot reach the bridge.');
+    if ((e as Error).name === 'AbortError') throw new Error('Connection timed out.');
+    throw new Error('Can\'t connect right now.');
   } finally {
     clearTimeout(timer);
   }

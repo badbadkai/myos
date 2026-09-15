@@ -41,16 +41,22 @@ export default function Money({ schema }: { schema: Schema }) {
   );
 }
 
+function monthLabel(key: string) {
+  const [y, m] = key.split('-').map(Number);
+  if (!y || !m) return key;
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long' });
+}
+
 function Balance({ sum, loading }: { sum: FinanceSummary | null; loading: boolean }) {
   return (
     <div className="panel text-center">
-      <p className="label">Banked · account main</p>
+      <p className="label">Current balance</p>
       <p className="font-head text-4xl font-bold text-oxblood mt-1">
         {sum ? money(sum.banked) : loading ? '…' : '—'}
       </p>
       {sum && (
         <p className="text-xs text-dim mt-2">
-          {sum.monthKey}: <span className="text-green">+{money(sum.monthIn)}</span> ·{' '}
+          {monthLabel(sum.monthKey)}: <span className="text-green">+{money(sum.monthIn)}</span> ·{' '}
           <span className="text-pink">−{money(sum.monthOut)}</span> ·{' '}
           net <span className={sum.net >= 0 ? 'text-green' : 'text-pink'}>{money(sum.net)}</span>
         </p>
