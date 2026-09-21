@@ -43,20 +43,24 @@ export default defineConfig({
         // fonts are available offline and the app looks right with no network.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Cache the last successful GET /api/* response so the app stays usable
-        // read-only when the bridge blips. Health is excluded — it's the live
-        // online probe. Non-GET writes are never cached (urlPattern requires GET).
+        // read-only when the bridge blips. Excluded: /api/health (the live online
+        // probe) and /api/schema (the field map that drives the whole UI — a stale
+        // or opaque cached copy silently drops fields, so it must always be live).
+        // Only status 200 is cacheable — never cache opaque (0) error responses.
+        // Non-GET writes are never cached (urlPattern requires GET).
         runtimeCaching: [
           {
             urlPattern: ({ url, request }) =>
               request.method === 'GET'
               && url.pathname.startsWith('/api/')
-              && url.pathname !== '/api/health',
+              && url.pathname !== '/api/health'
+              && url.pathname !== '/api/schema',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'myos-api',
               networkTimeoutSeconds: 5,
               expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],
