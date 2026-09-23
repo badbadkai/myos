@@ -4,28 +4,30 @@ import { queue } from './lib/queue';
 import type { Schema } from './lib/types';
 import { ToastProvider } from './lib/ui';
 import Login from './views/Login';
-import Today from './views/Today';
+import Home from './views/Home';
 import Status from './views/Status';
 import Money from './views/Money';
 import Calendar from './views/Calendar';
 import Habits from './views/Habits';
 import Settings from './views/Settings';
 
-type Tab = 'today' | 'status' | 'money' | 'calendar' | 'habits' | 'settings';
+type Tab = 'home' | 'status' | 'money' | 'calendar' | 'habits' | 'settings';
 
+// The hotbar: five slots with Home elevated in the dead centre, flanked by the
+// money/calendar utilities on the left and the habits/status game views on the
+// right. Settings lives in the header gear, off the hotbar.
 const TABS: { id: Tab; label: string; glyph: string }[] = [
-  { id: 'today', label: 'Today', glyph: '◆' },
-  { id: 'status', label: 'Status', glyph: '❖' },
   { id: 'money', label: 'Money', glyph: '§' },
   { id: 'calendar', label: 'Calendar', glyph: '▦' },
+  { id: 'home', label: 'Home', glyph: '◈' },
   { id: 'habits', label: 'Habits', glyph: '✦' },
-  { id: 'settings', label: 'Settings', glyph: '⚙' },
+  { id: 'status', label: 'Status', glyph: '❖' },
 ];
 
 type Phase = 'checking' | 'offline' | 'login' | 'ready';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('today');
+  const [tab, setTab] = useState<Tab>('home');
   const [schema, setSchema] = useState<Schema | null>(null);
   const [err, setErr] = useState<string>('');
   const [phase, setPhase] = useState<Phase>('checking');
@@ -109,9 +111,17 @@ export default function App() {
           >
             <span className="text-dim">◈</span> myOS
           </h1>
-          <span className="text-xs text-dim tracking-wide uppercase">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-dim tracking-wide uppercase">
+              {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
+            <button
+              onClick={() => setTab('settings')}
+              aria-label="Settings"
+              className={`text-lg leading-none transition-colors ${tab === 'settings' ? 'text-oxblood' : 'text-dim'}`}
+              style={tab === 'settings' ? { textShadow: '0 0 12px rgba(77,195,255,0.7)' } : undefined}
+            >⚙</button>
+          </div>
         </header>
 
         {pending > 0 && (
@@ -124,7 +134,7 @@ export default function App() {
         <main className="flex-1 px-4 pb-28">
           {schema && (
             <>
-              {tab === 'today' && <Today schema={schema} />}
+              {tab === 'home' && <Home schema={schema} onOpenStatus={() => setTab('status')} />}
               {tab === 'status' && <Status />}
               {tab === 'money' && <Money schema={schema} />}
               {tab === 'calendar' && <Calendar schema={schema} />}
@@ -135,9 +145,34 @@ export default function App() {
         </main>
 
         <nav className="fixed bottom-0 left-0 right-0 bg-cream/90 backdrop-blur border-t border-edge pb-[env(safe-area-inset-bottom)]">
-          <div className="max-w-2xl mx-auto grid grid-cols-6">
+          <div className="max-w-2xl mx-auto grid grid-cols-5 items-end">
             {TABS.map((t) => {
               const on = tab === t.id;
+              // Home is the elevated centre slot — a raised neon disc.
+              if (t.id === 'home') {
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className="flex flex-col items-center gap-1 -mt-5"
+                  >
+                    <span
+                      className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl leading-none border transition-all ${
+                        on ? 'text-cream border-oxblood' : 'text-oxblood border-edge'
+                      }`}
+                      style={{
+                        background: on
+                          ? 'linear-gradient(165deg,#4dc3ff,#2f8fd0)'
+                          : 'linear-gradient(165deg,#0d1c2e,#081321)',
+                        boxShadow: on
+                          ? '0 0 20px rgba(77,195,255,0.55)'
+                          : '0 0 12px rgba(77,195,255,0.18)',
+                      }}
+                    >{t.glyph}</span>
+                    <span className={`font-head uppercase text-[10px] tracking-wide pb-2 ${on ? 'text-oxblood' : 'text-dim'}`}>{t.label}</span>
+                  </button>
+                );
+              }
               return (
                 <button
                   key={t.id}
