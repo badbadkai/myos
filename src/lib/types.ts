@@ -90,3 +90,36 @@ export interface CalEvent {
   notes: string;
   allday: boolean;
 }
+
+// ---- gamification (Status window) ----------------------------------------
+export interface StatBlock {
+  points: number;
+  level: number;
+  into: number; // points earned into the current level
+  need: number; // points needed to clear the current level
+}
+export interface CharLevel {
+  level: number;
+  into: number;
+  need: number;
+  total: number; // lifetime EXP
+}
+export interface Quest {
+  date: string;
+  pushups: number;
+  situps: number;
+  running: number;
+  submitted: number;
+}
+export interface GameState {
+  generatedAt: string;
+  timezone: string;
+  today: string;
+  character: CharLevel;
+  stats: Record<string, StatBlock>;
+  breakdown: Record<string, Record<string, number>>;
+  quest: Quest;
+}
+export interface AppSettings {
+  timezone: string;
+}

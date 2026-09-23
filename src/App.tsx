@@ -4,15 +4,17 @@ import type { Schema } from './lib/types';
 import { ToastProvider } from './lib/ui';
 import Login from './views/Login';
 import Today from './views/Today';
+import Status from './views/Status';
 import Money from './views/Money';
 import Calendar from './views/Calendar';
 import Habits from './views/Habits';
 import Settings from './views/Settings';
 
-type Tab = 'today' | 'money' | 'calendar' | 'habits' | 'settings';
+type Tab = 'today' | 'status' | 'money' | 'calendar' | 'habits' | 'settings';
 
 const TABS: { id: Tab; label: string; glyph: string }[] = [
   { id: 'today', label: 'Today', glyph: '◆' },
+  { id: 'status', label: 'Status', glyph: '❖' },
   { id: 'money', label: 'Money', glyph: '§' },
   { id: 'calendar', label: 'Calendar', glyph: '▦' },
   { id: 'habits', label: 'Habits', glyph: '✦' },
@@ -93,6 +95,7 @@ export default function App() {
           {schema && (
             <>
               {tab === 'today' && <Today schema={schema} />}
+              {tab === 'status' && <Status />}
               {tab === 'money' && <Money schema={schema} />}
               {tab === 'calendar' && <Calendar schema={schema} />}
               {tab === 'habits' && <Habits schema={schema} />}
@@ -102,7 +105,7 @@ export default function App() {
         </main>
 
         <nav className="fixed bottom-0 left-0 right-0 bg-cream/95 backdrop-blur border-t border-edge pb-[env(safe-area-inset-bottom)]">
-          <div className="max-w-2xl mx-auto grid grid-cols-5">
+          <div className="max-w-2xl mx-auto grid grid-cols-6">
             {TABS.map((t) => (
               <button
                 key={t.id}

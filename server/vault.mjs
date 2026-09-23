@@ -45,6 +45,12 @@ export function getSchema() {
   return JSON.parse(read('x/myos.schema.json'));
 }
 
+// ---- low-level access shared with the game engine -------------------------
+export function readVaultFile(rel) { return exists(rel) ? read(rel) : null; }
+export function writeVaultFile(rel, content) { write(rel, content); }
+export function vaultExists(rel) { return exists(rel); }
+export function parseVaultCsv(text) { return parseCsv(text); }
+
 // ---- CSV helpers (append-only + in-place edit) ----------------------------
 function parseCsv(text) {
   const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.length > 0);

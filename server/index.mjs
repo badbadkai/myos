@@ -14,6 +14,10 @@ import {
   listEvents, upsertEvent, deleteEvent,
   captureInbox,
 } from './vault.mjs';
+import {
+  computeGameState, submitQuest, saveQuest, autoFinalizeQuests,
+  readSettings, writeSettings,
+} from './game.mjs';
 import { loadAuth, verifyPassword, issueToken, requireAuth } from './auth.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -209,6 +213,31 @@ app.delete('/api/calendar/events/:id', h((req, res) => {
   res.json(deleteEvent(getSchema(), req.params.id));
 }));
 
+// ---- system / gamification ------------------------------------------------
+app.get('/api/system/state', h((req, res) => {
+  res.json(computeGameState(getSchema()));
+}));
+
+// Daily workout quest. `submit:true` locks the day in and awards; otherwise the
+// checkbox state is saved as pending (auto-submits at the 23:55 local cutoff).
+app.post('/api/system/quest', h((req, res) => {
+  const schema = getSchema();
+  const { date, pushups, situps, running, submit } = req.body || {};
+  const d = date ? reqDate(date) : undefined;
+  const fn = submit ? submitQuest : saveQuest;
+  res.json(fn(schema, { date: d, pushups, situps, running }));
+}));
+
+app.get('/api/settings', h((req, res) => {
+  res.json(readSettings(getSchema()));
+}));
+
+app.put('/api/settings', h((req, res) => {
+  const schema = getSchema();
+  const { timezone } = req.body || {};
+  res.json(writeSettings(schema, timezone ? { timezone } : {}));
+}));
+
 // ---- inbox ----------------------------------------------------------------
 app.post('/api/inbox', h((req, res) => {
   const schema = getSchema();
@@ -237,3 +266,11 @@ app.listen(PORT, () => {
   catch (e) { console.log(`[myos] AUTH CONFIG MISSING — ${e.message}`); }
   if (existsSync(dist)) console.log('[myos] serving built PWA from dist/');
 });
+
+// Finalize any past-due workout quest once a minute while the bridge is up, so
+// an unsubmitted day locks in at its 23:55 local cutoff even if the app is
+// closed. Lazy finalization on the next state read is the backstop if the
+// laptop was asleep at the cutoff.
+setInterval(() => {
+  try { autoFinalizeQuests(getSchema()); } catch { /* best-effort */ }
+}, 60000).unref();

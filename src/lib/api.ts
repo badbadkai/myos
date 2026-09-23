@@ -1,4 +1,4 @@
-import type { Schema, Daily, FinanceSummary, Streaks, CalEvent } from './types';
+import type { Schema, Daily, FinanceSummary, Streaks, CalEvent, GameState, AppSettings } from './types';
 
 // In dev and the localhost bridge build this is '' so calls hit the same
 // origin (Vite proxies /api, or the bridge serves the app). In the Pages build
@@ -98,6 +98,14 @@ export const api = {
 
   inbox: (text: string) =>
     req<{ ok: boolean; path: string }>('/inbox', { method: 'POST', body: JSON.stringify({ text }) }),
+
+  systemState: () => req<GameState>('/system/state'),
+  quest: (q: { date?: string; pushups?: boolean; situps?: boolean; running?: boolean; submit?: boolean }) =>
+    req<GameState>('/system/quest', { method: 'POST', body: JSON.stringify(q) }),
+
+  getSettings: () => req<AppSettings>('/settings'),
+  setTimezone: (timezone: string) =>
+    req<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify({ timezone }) }),
 };
 
 export function todayIso(): string {
