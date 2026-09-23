@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, todayIso } from '../lib/api';
+import { api, todayIso, QueuedError } from '../lib/api';
 import type { Schema, FinanceSummary } from '../lib/types';
 import { useToast, money } from '../lib/ui';
 
@@ -87,7 +87,10 @@ function Capture({ schema, onDone }: { schema: Schema; onDone: (s: FinanceSummar
       onDone(s);
       setAmount(''); setNote(''); setDate(todayIso());
       toast('Transaction logged');
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      if (e instanceof QueuedError) { setAmount(''); setNote(''); setDate(todayIso()); toast(e.message); }
+      else toast((e as Error).message, 'err');
+    }
     setBusy(false);
   };
 
@@ -111,9 +114,25 @@ function Capture({ schema, onDone }: { schema: Schema; onDone: (s: FinanceSummar
     recog.current = r; r.start(); setListening(true);
   };
 
+  const quick = schema.finance.quickLog ?? [];
+  const applyQuick = (q: { amount: number; category: string }) => {
+    setSign('out');
+    setAmount(String(q.amount));
+    setCategory(q.category);
+  };
+
   return (
     <div className="panel">
       <p className="label mb-3">Log transaction</p>
+      {quick.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {quick.map((q) => (
+            <button key={q.label} className="chip" onClick={() => applyQuick(q)}>
+              {q.label} <span className="text-dim">{money(q.amount)}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2 mb-3">
         <button className={`chip flex-1 ${sign === 'out' ? 'chip-on' : ''}`} onClick={() => setSign('out')}>Spent</button>
         <button className={`chip flex-1 ${sign === 'in' ? 'chip-on' : ''}`} onClick={() => setSign('in')}>Received</button>
@@ -155,7 +174,10 @@ function Snapshot({ onDone }: { onDone: (s: FinanceSummary) => void }) {
       onDone(await api.addSnapshot({ total: t, parts }));
       setTotal(''); setParts(''); setOpen(false);
       toast('Snapshot saved');
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      if (e instanceof QueuedError) { setTotal(''); setParts(''); setOpen(false); toast(e.message); }
+      else toast((e as Error).message, 'err');
+    }
     setBusy(false);
   };
   return (

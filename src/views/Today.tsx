@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, todayIso } from '../lib/api';
+import { api, todayIso, QueuedError } from '../lib/api';
 import type { Schema, Daily, LogEntry } from '../lib/types';
 import { useToast } from '../lib/ui';
 
@@ -53,7 +53,10 @@ export default function Today({ schema }: { schema: Schema }) {
       const res = await api.setFields(date, fields);
       setDaily(res);
       toast('Daily note saved');
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      if (e instanceof QueuedError) toast(e.message);
+      else toast((e as Error).message, 'err');
+    }
     setSaving(false);
   };
 
@@ -64,6 +67,8 @@ export default function Today({ schema }: { schema: Schema }) {
     try {
       setDaily(await api.setHabit(date, habitKey, checked));
     } catch (e) {
+      // queued while offline → the optimistic flip is correct, keep it
+      if (e instanceof QueuedError) { toast(e.message); return; }
       setDaily(prev);
       toast((e as Error).message, 'err');
     }
@@ -81,6 +86,8 @@ export default function Today({ schema }: { schema: Schema }) {
       setDaily(res);
       setDraft((d) => ({ ...d, [field]: String(res.frontmatter[field] ?? 0) }));
     } catch (e) {
+      // queued while offline → keep the optimistic value
+      if (e instanceof QueuedError) { toast(e.message); return; }
       setDaily(prev);
       setDraft((d) => ({ ...d, [field]: String(prev?.frontmatter[field] ?? 0) }));
       toast((e as Error).message, 'err');
@@ -92,7 +99,10 @@ export default function Today({ schema }: { schema: Schema }) {
       const res = await api.addLog(date, text);
       setDaily(res);
       toast('Added to log');
-    } catch (e) { toast((e as Error).message, 'err'); throw e; }
+    } catch (e) {
+      if (e instanceof QueuedError) { toast(e.message); return; } // clears the draft upstream
+      toast((e as Error).message, 'err'); throw e;
+    }
   };
 
   const shift = (days: number) => {
@@ -292,7 +302,10 @@ function InboxCapture() {
       await api.inbox(text.trim());
       setText('');
       toast('Captured to inbox');
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      if (e instanceof QueuedError) { setText(''); toast(e.message); return; }
+      toast((e as Error).message, 'err');
+    }
     setBusy(false);
   };
   return (

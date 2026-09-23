@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api } from '../lib/api';
+import { api, QueuedError } from '../lib/api';
 import type { Schema, CalEvent } from '../lib/types';
 import { useToast } from '../lib/ui';
 
@@ -71,14 +71,20 @@ export default function Calendar({ schema }: { schema: Schema }) {
     if (busy) return; // guard against a double-tap creating duplicate rows
     setBusy(true);
     try { await api.upsertEvent(ev); setEditing(null); await load(); toast('Event saved'); }
-    catch (e) { toast((e as Error).message, 'err'); }
+    catch (e) {
+      if (e instanceof QueuedError) { setEditing(null); toast(e.message); }
+      else toast((e as Error).message, 'err');
+    }
     finally { setBusy(false); }
   };
   const remove = async (id: string) => {
     if (busy) return;
     setBusy(true);
     try { await api.deleteEvent(id); setEditing(null); await load(); toast('Event deleted'); }
-    catch (e) { toast((e as Error).message, 'err'); }
+    catch (e) {
+      if (e instanceof QueuedError) { setEditing(null); toast(e.message); }
+      else toast((e as Error).message, 'err');
+    }
     finally { setBusy(false); }
   };
 

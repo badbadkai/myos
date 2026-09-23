@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api } from '../lib/api';
+import { api, QueuedError } from '../lib/api';
 import { useToast } from '../lib/ui';
 
 const ZONES = [
@@ -31,7 +31,10 @@ export default function Settings({ onLogout }: { onLogout: () => void }) {
     const prev = tz;
     setTz(id); // optimistic
     try { await api.setTimezone(id); toast(`Timezone → ${ZONES.find((z) => z.id === id)?.label}`); }
-    catch (e) { setTz(prev); toast((e as Error).message, 'err'); }
+    catch (e) {
+      if (e instanceof QueuedError) { toast(e.message); return; } // keep the optimistic pick
+      setTz(prev); toast((e as Error).message, 'err');
+    }
   };
 
   const reconnect = async () => { await check(); toast(status === 'online' ? 'Reconnected' : 'Connection checked'); };

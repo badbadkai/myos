@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api } from '../lib/api';
+import { api, QueuedError } from '../lib/api';
 import { useToast } from '../lib/ui';
 import type { GameState } from '../lib/types';
 
@@ -64,7 +64,10 @@ export default function Status() {
       setState(s);
       const boxes = Number(check.pushups) + Number(check.situps) + Number(check.running);
       toast(boxes ? `Quest logged · +${boxes * 2} STR` : 'Quest closed');
-    } catch (e) { toast((e as Error).message, 'err'); }
+    } catch (e) {
+      if (e instanceof QueuedError) toast(e.message);
+      else toast((e as Error).message, 'err');
+    }
     finally { setBusy(false); }
   };
 

@@ -27,6 +27,7 @@ export interface Schema {
     londonFund: string;
     account: string;
     categories: { spend: string[]; tracked: string[]; income: string[] };
+    quickLog?: { label: string; amount: number; category: string }[];
   };
   habits: { csv: string; columns: string[] };
   calendar: { csv: string; columns: string[]; categories: string[] };

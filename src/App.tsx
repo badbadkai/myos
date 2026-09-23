@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api, auth, AuthError } from './lib/api';
+import { api, auth, AuthError, flushQueue } from './lib/api';
+import { queue } from './lib/queue';
 import type { Schema } from './lib/types';
 import { ToastProvider } from './lib/ui';
 import Login from './views/Login';
@@ -29,6 +30,8 @@ export default function App() {
   const [err, setErr] = useState<string>('');
   const [phase, setPhase] = useState<Phase>('checking');
 
+  const [pending, setPending] = useState(queue.size());
+
   const boot = useCallback(async () => {
     setPhase('checking'); setErr('');
     try {
@@ -38,6 +41,8 @@ export default function App() {
       setPhase('offline');
       return;
     }
+    // bridge is back — replay anything parked while offline
+    if (queue.size()) flushQueue().catch(() => {});
     if (!auth.get()) { setPhase('login'); return; }
     try {
       await api.me();
@@ -50,6 +55,19 @@ export default function App() {
   }, []);
 
   useEffect(() => { boot(); }, [boot]);
+
+  // Keep the pending badge live and flush the moment the browser sees the
+  // network return.
+  useEffect(() => {
+    const onQueue = (e: Event) => setPending((e as CustomEvent<number>).detail);
+    const onOnline = () => flushQueue().catch(() => {});
+    window.addEventListener('myos:queue', onQueue);
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('myos:queue', onQueue);
+      window.removeEventListener('online', onOnline);
+    };
+  }, []);
 
   const logout = () => { api.logout(); setSchema(null); setPhase('login'); };
 
@@ -90,6 +108,13 @@ export default function App() {
             {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         </header>
+
+        {pending > 0 && (
+          <div className="mx-4 mb-2 rounded-lg border border-amber/50 bg-amber/10 px-3 py-2 text-xs text-amber flex items-center justify-between">
+            <span>{pending} change{pending > 1 ? 's' : ''} saved offline — will sync when reconnected</span>
+            <button className="chip" onClick={() => flushQueue().catch(() => {})}>Sync now</button>
+          </div>
+        )}
 
         <main className="flex-1 px-4 pb-28">
           {schema && (
