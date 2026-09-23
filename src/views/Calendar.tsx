@@ -335,7 +335,7 @@ function EventEditor({ schema, ev, busy, onChange, onSave, onDelete, onClose }: 
     onDelete(ev.id);
   };
   return (
-    <div className="fixed inset-0 z-40 bg-ink/40 flex items-end sm:items-center justify-center p-4" onClick={tryClose}>
+    <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={tryClose}>
       <div className="panel w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3">
           <p className="label">{ev.id ? 'Edit event' : 'New event'}</p>

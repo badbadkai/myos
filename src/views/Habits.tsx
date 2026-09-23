@@ -43,8 +43,8 @@ export default function Habits({ schema }: { schema: Schema }) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {keys.map((k) => (
-            <div key={k} className="flex flex-col items-center bg-cream border border-edge rounded-lg py-3">
-              <span className="font-head text-3xl font-bold text-oxblood">{s.streaks[k]}</span>
+            <div key={k} className="flex flex-col items-center bg-cream/60 border border-edge rounded-lg py-3">
+              <span className="font-head text-3xl font-bold text-oxblood" style={{ textShadow: '0 0 12px rgba(77,195,255,0.5)' }}>{s.streaks[k]}</span>
               <span className="label">{LABELS[k] ?? k}</span>
             </div>
           ))}

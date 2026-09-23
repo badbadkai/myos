@@ -23,9 +23,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
     <div className="min-h-full flex items-center justify-center px-6 py-16">
       <form onSubmit={submit} className="panel w-full max-w-sm flex flex-col gap-4">
         <div className="flex flex-col items-center gap-3 mb-2">
-          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="myOS" className="w-16 h-16" />
-          <h1 className="font-head text-2xl font-bold text-oxblood tracking-tight">myOS</h1>
-          <p className="text-xs text-dim">my operating system</p>
+          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="myOS" className="w-16 h-16"
+            style={{ filter: 'drop-shadow(0 0 12px rgba(77,195,255,0.5))' }} />
+          <h1 className="font-head text-2xl font-bold text-oxblood tracking-[0.08em]"
+            style={{ textShadow: '0 0 16px rgba(77,195,255,0.55)' }}>myOS</h1>
+          <p className="text-xs text-dim uppercase tracking-[0.2em]">my operating system</p>
         </div>
         <label className="flex flex-col gap-1">
           <span className="label">Email</span>

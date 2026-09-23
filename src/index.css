@@ -27,7 +27,7 @@
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 html, body, #root {
@@ -36,7 +36,11 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: theme('colors.cream');
+  /* deep-space vignette: a faint cyan glow up top over the navy base */
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(77, 195, 255, 0.1), transparent 60%),
+    theme('colors.cream');
+  background-attachment: fixed;
   color: theme('colors.ink');
   font-family: theme('fontFamily.sans');
   -webkit-font-smoothing: antialiased;
@@ -44,32 +48,69 @@ body {
 }
 
 @layer components {
+  /* Glass "status window" panel: dark gradient, cyan hairline, soft outer +
+     inner glow. Matches the Status tab's bespoke cards so the whole app reads
+     as one game HUD. */
   .panel {
-    @apply bg-paper border border-edge rounded-xl p-4;
+    @apply rounded-xl p-4 border;
+    background: linear-gradient(165deg, #0d1c2e, #081321);
+    border-color: rgba(77, 195, 255, 0.22);
+    box-shadow: 0 0 20px rgba(77, 195, 255, 0.06), inset 0 0 30px rgba(77, 195, 255, 0.03);
   }
   .label {
-    @apply font-head uppercase tracking-wide text-xs text-dim;
+    @apply font-head uppercase text-xs text-dim;
+    letter-spacing: 0.14em;
   }
   .field {
-    @apply w-full bg-cream border border-edge rounded-lg px-3 py-2 text-ink
-           focus:outline-none focus:border-oxblood focus:ring-1 focus:ring-oxblood;
+    @apply w-full rounded-lg px-3 py-2 text-ink bg-transparent border
+           focus:outline-none;
+    background: rgba(5, 12, 22, 0.6);
+    border-color: rgba(77, 195, 255, 0.2);
+  }
+  .field:focus {
+    border-color: theme('colors.oxblood');
+    box-shadow: 0 0 0 1px theme('colors.oxblood'), 0 0 10px rgba(77, 195, 255, 0.35);
   }
   .btn {
-    @apply font-head uppercase tracking-wide text-sm rounded-lg px-4 py-2 transition-colors
+    @apply font-head uppercase text-sm rounded-lg px-4 py-2 transition-all
            disabled:opacity-40 disabled:cursor-not-allowed;
+    letter-spacing: 0.08em;
   }
   .btn-primary {
-    @apply btn bg-oxblood text-cream hover:bg-pink;
+    @apply btn;
+    color: #05101c;
+    background: linear-gradient(90deg, #4dc3ff, #6fd4ff);
+    box-shadow: 0 0 16px rgba(77, 195, 255, 0.35);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 22px rgba(77, 195, 255, 0.55);
   }
   .btn-ghost {
-    @apply btn border border-edge text-ink hover:bg-edge/40;
+    @apply btn text-ink border;
+    border-color: rgba(77, 195, 255, 0.28);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(77, 195, 255, 0.08);
+    border-color: theme('colors.oxblood');
   }
   .chip {
-    @apply font-head uppercase tracking-wide text-xs rounded-full px-3 py-1 border border-edge
-           text-dim hover:border-oxblood hover:text-oxblood transition-colors cursor-pointer;
+    @apply font-head uppercase text-xs rounded-full px-3 py-1 border text-dim
+           transition-all cursor-pointer;
+    letter-spacing: 0.08em;
+    border-color: rgba(77, 195, 255, 0.22);
+  }
+  .chip:hover {
+    @apply text-oxblood;
+    border-color: theme('colors.oxblood');
   }
   .chip-on {
-    @apply bg-oxblood text-cream border-oxblood hover:text-cream;
+    color: #05101c;
+    background: theme('colors.oxblood');
+    border-color: theme('colors.oxblood');
+    box-shadow: 0 0 10px rgba(77, 195, 255, 0.4);
+  }
+  .chip-on:hover {
+    color: #05101c;
   }
 }
 

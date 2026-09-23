@@ -51,7 +51,7 @@ function Balance({ sum, loading }: { sum: FinanceSummary | null; loading: boolea
   return (
     <div className="panel text-center">
       <p className="label">Current balance</p>
-      <p className="font-head text-4xl font-bold text-oxblood mt-1">
+      <p className="font-head text-4xl font-bold text-oxblood mt-1" style={{ textShadow: '0 0 16px rgba(77,195,255,0.45)' }}>
         {sum ? money(sum.banked) : loading ? '…' : '—'}
       </p>
       {sum && (

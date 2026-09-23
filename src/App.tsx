@@ -103,8 +103,13 @@ export default function App() {
     <ToastProvider>
       <div className="min-h-full flex flex-col max-w-2xl mx-auto">
         <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3 flex items-baseline justify-between">
-          <h1 className="font-head text-2xl font-bold text-oxblood tracking-tight">myOS</h1>
-          <span className="text-xs text-dim">
+          <h1
+            className="font-head text-2xl font-bold text-oxblood tracking-[0.05em]"
+            style={{ textShadow: '0 0 14px rgba(77,195,255,0.55)' }}
+          >
+            <span className="text-dim">◈</span> myOS
+          </h1>
+          <span className="text-xs text-dim tracking-wide uppercase">
             {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         </header>
@@ -129,20 +134,21 @@ export default function App() {
           )}
         </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 bg-cream/95 backdrop-blur border-t border-edge pb-[env(safe-area-inset-bottom)]">
+        <nav className="fixed bottom-0 left-0 right-0 bg-cream/90 backdrop-blur border-t border-edge pb-[env(safe-area-inset-bottom)]">
           <div className="max-w-2xl mx-auto grid grid-cols-6">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`py-3 flex flex-col items-center gap-0.5 transition-colors ${
-                  tab === t.id ? 'text-oxblood' : 'text-dim'
-                }`}
-              >
-                <span className="text-lg leading-none">{t.glyph}</span>
-                <span className="font-head uppercase text-[10px] tracking-wide">{t.label}</span>
-              </button>
-            ))}
+            {TABS.map((t) => {
+              const on = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`py-3 flex flex-col items-center gap-0.5 transition-colors ${on ? 'text-oxblood' : 'text-dim'}`}
+                >
+                  <span className="text-lg leading-none" style={on ? { textShadow: '0 0 12px rgba(77,195,255,0.7)' } : undefined}>{t.glyph}</span>
+                  <span className="font-head uppercase text-[10px] tracking-wide">{t.label}</span>
+                </button>
+              );
+            })}
           </div>
         </nav>
       </div>
